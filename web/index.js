@@ -171,18 +171,31 @@ function findFastGroupsMuters() {
   return (app.graph?._nodes || []).filter((n) => n.type === "Fast Groups Muter (rgthree)");
 }
 
-/** Returns Map<groupTitle, {muter, widget}> across every muter on the graph. */
-function getMuterWidgetMap() {
-  const map = new Map();
+/** Returns [{muter, widgets: Map<groupTitle, widget>}] per muter on the graph.
+ *  Per-muter grouping matters: rgthree's `matchColors` property scopes each
+ *  muter to a subset of groups, and Solo should only toggle within the muter
+ *  that actually owns the target group — touching other muters would clobber
+ *  unrelated state in the user's color-coded setup. */
+function getMutersAndWidgets() {
+  const out = [];
   for (const muter of findFastGroupsMuters()) {
+    const widgets = new Map();
     for (const w of (muter.widgets || [])) {
-      // Be permissive — match on label pattern regardless of name/type.
       const label = w?.label || w?.name || "";
       const m = String(label).match(/^Enable\s+(.+)$/);
-      if (m) map.set(m[1].trim(), { muter, widget: w });
+      if (m) widgets.set(m[1].trim(), w);
     }
+    if (widgets.size > 0) out.push({ muter, widgets });
   }
-  return map;
+  return out;
+}
+
+/** Find the muter that owns this group (first match if multiple). */
+function findMuterOwningGroup(targetTitle) {
+  for (const entry of getMutersAndWidgets()) {
+    if (entry.widgets.has(targetTitle)) return entry;
+  }
+  return null;
 }
 
 function setMuterWidget(widget, toggled) {
@@ -195,29 +208,28 @@ function setMuterWidget(widget, toggled) {
   } catch (e) { console.warn("[comfyui-navigator] muter widget callback error:", e); }
 }
 
+/** Reset = turn every widget on, across every muter. */
 function setAllMutersTo(toggled) {
-  const map = getMuterWidgetMap();
-  const dirtyMuters = new Set();
-  for (const { muter, widget } of map.values()) {
-    setMuterWidget(widget, toggled);
-    dirtyMuters.add(muter);
+  let count = 0;
+  for (const { muter, widgets } of getMutersAndWidgets()) {
+    for (const widget of widgets.values()) {
+      setMuterWidget(widget, toggled);
+      count++;
+    }
+    muter.setDirtyCanvas?.(true, true);
   }
-  for (const m of dirtyMuters) m.setDirtyCanvas?.(true, true);
-  return map.size;
+  return count;
 }
 
+/** Solo only inside the muter that owns this group. Other muters untouched. */
 function soloGroupViaMuter(targetTitle) {
-  const map = getMuterWidgetMap();
-  let foundTarget = false;
-  const dirtyMuters = new Set();
-  for (const [title, { muter, widget }] of map) {
-    const on = title === targetTitle;
-    setMuterWidget(widget, on);
-    if (on) foundTarget = true;
-    dirtyMuters.add(muter);
+  const owner = findMuterOwningGroup(targetTitle);
+  if (!owner) return false;
+  for (const [title, widget] of owner.widgets) {
+    setMuterWidget(widget, title === targetTitle);
   }
-  for (const m of dirtyMuters) m.setDirtyCanvas?.(true, true);
-  return foundTarget;
+  owner.muter.setDirtyCanvas?.(true, true);
+  return true;
 }
 
 // Fallback: directly set LiteGraph mode on every node, based on whether
