@@ -158,43 +158,66 @@ function jumpToGroup(g) {
 }
 
 // --- rgthree FastGroupsMuter integration --------------------------------
+//
+// rgthree's Fast Groups Muter exposes one widget per group:
+//   - name:  "RGTHREE_TOGGLE_AND_NAV" (generic — same for every widget)
+//   - type:  "custom"
+//   - label: "Enable {group_title}"   ← this is the only link back to the group
+//   - value: { toggled: bool }        ← OBJECT, not a plain boolean
+// A single workflow may have multiple muters (each managing a subset of
+// groups), so we scan them all and aggregate.
 
-function findFastGroupsMuter() {
-  const nodes = app.graph?._nodes || [];
-  for (const n of nodes) {
-    if (n.type === "Fast Groups Muter (rgthree)") return n;
-  }
-  return null;
+function findFastGroupsMuters() {
+  return (app.graph?._nodes || []).filter((n) => n.type === "Fast Groups Muter (rgthree)");
 }
 
-function muterWidgetsForGroups(muter) {
-  // rgthree's FastGroupsMuter exposes one toggle widget per group, named after the group title.
-  return (muter.widgets || []).filter((w) => w?.type === "RGTHREE_TOGGLE" || w?.type === "toggle");
+/** Returns Map<groupTitle, {muter, widget}> across every muter on the graph. */
+function getMuterWidgetMap() {
+  const map = new Map();
+  for (const muter of findFastGroupsMuters()) {
+    for (const w of (muter.widgets || [])) {
+      // Be permissive — match on label pattern regardless of name/type.
+      const label = w?.label || w?.name || "";
+      const m = String(label).match(/^Enable\s+(.+)$/);
+      if (m) map.set(m[1].trim(), { muter, widget: w });
+    }
+  }
+  return map;
 }
 
-function setMuterAll(muter, value) {
-  const widgets = muterWidgetsForGroups(muter);
-  for (const w of widgets) {
-    w.value = value;
-    if (typeof w.callback === "function") w.callback(value);
-  }
-  muter.setDirtyCanvas?.(true, true);
+function setMuterWidget(widget, toggled) {
+  // Value is { toggled: bool }. Mutate in place AND call callback so rgthree
+  // re-renders + dispatches its own change handlers.
+  const next = { ...(widget.value || {}), toggled: !!toggled };
+  widget.value = next;
+  try {
+    if (typeof widget.callback === "function") widget.callback(next);
+  } catch (e) { console.warn("[comfyui-navigator] muter widget callback error:", e); }
 }
 
-function soloGroupViaMuter(muter, groupTitle) {
-  const widgets = muterWidgetsForGroups(muter);
-  let solo = null;
-  for (const w of widgets) {
-    if (w.name === groupTitle || w.label === groupTitle) solo = w;
-    w.value = false;
-    if (typeof w.callback === "function") w.callback(false);
+function setAllMutersTo(toggled) {
+  const map = getMuterWidgetMap();
+  const dirtyMuters = new Set();
+  for (const { muter, widget } of map.values()) {
+    setMuterWidget(widget, toggled);
+    dirtyMuters.add(muter);
   }
-  if (solo) {
-    solo.value = true;
-    if (typeof solo.callback === "function") solo.callback(true);
+  for (const m of dirtyMuters) m.setDirtyCanvas?.(true, true);
+  return map.size;
+}
+
+function soloGroupViaMuter(targetTitle) {
+  const map = getMuterWidgetMap();
+  let foundTarget = false;
+  const dirtyMuters = new Set();
+  for (const [title, { muter, widget }] of map) {
+    const on = title === targetTitle;
+    setMuterWidget(widget, on);
+    if (on) foundTarget = true;
+    dirtyMuters.add(muter);
   }
-  muter.setDirtyCanvas?.(true, true);
-  return !!solo;
+  for (const m of dirtyMuters) m.setDirtyCanvas?.(true, true);
+  return foundTarget;
 }
 
 // Fallback: directly set LiteGraph mode on every node, based on whether
@@ -224,26 +247,30 @@ function resetSoloModeFlags() {
 }
 
 function soloGroup(g) {
-  const muter = findFastGroupsMuter();
-  if (muter) {
-    const ok = soloGroupViaMuter(muter, groupTitle(g, 0));
-    if (!ok) console.warn("[comfyui-navigator] muter found but no widget matched group title:", groupTitle(g, 0));
+  const muters = findFastGroupsMuters();
+  if (muters.length) {
+    const title = groupTitle(g, 0);
+    const ok = soloGroupViaMuter(title);
+    if (!ok) {
+      console.warn(`[comfyui-navigator] muter present but no widget matched group title "${title}". Falling back to per-node mode flag.`);
+      soloGroupViaModeFlag(g);
+    }
   } else {
     soloGroupViaModeFlag(g);
   }
 }
 
 function resetMuteAll() {
-  const muter = findFastGroupsMuter();
-  if (muter) setMuterAll(muter, true);
+  const muters = findFastGroupsMuters();
+  if (muters.length) setAllMutersTo(true);
   else resetSoloModeFlags();
 }
 
 // --- right-click chip menu ---------------------------------------------
 
 function openRowMenu(g, evt) {
-  const muter = findFastGroupsMuter();
-  const muterLabel = muter ? "(rgthree muter)" : "(per-node fallback)";
+  const muterCount = findFastGroupsMuters().length;
+  const muterLabel = muterCount ? `(via ${muterCount} rgthree muter${muterCount === 1 ? '' : 's'})` : "(per-node fallback)";
   const opts = [
     { content: "Jump here", callback: () => jumpToGroup(g) },
     { content: "Center only (no zoom change)", callback: () => {
