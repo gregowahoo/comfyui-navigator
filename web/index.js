@@ -7,7 +7,7 @@ import { app } from "../../scripts/app.js";
 // Bump on every release. Exposed on window so it's trivial to check in the
 // console (`window.__cnv_version`) whether the browser is on the latest JS
 // or still serving a cached older copy.
-const CNV_VERSION = "0.2.2";
+const CNV_VERSION = "0.2.3";
 try {
   window.__cnv_version = CNV_VERSION;
   console.info(`[comfyui-navigator] loaded v${CNV_VERSION}`);
@@ -607,11 +607,27 @@ app.registerExtension({
     // a custom "graphConfigured" or similar; polling _groups length as
     // a cheap fallback. Also re-sync checkbox states so that toggles
     // made directly on the muter node propagate to the panel UI.
+    //
+    // CRITICAL: also re-render when placeholders could become real toggles.
+    // Workflow load + muter-widget construction is async; the panel often
+    // renders BEFORE any muter widget exists, baking every row into a
+    // placeholder (no click handler). Without this check, the panel stays
+    // dead even after widgets become available.
     let lastGroupCount = -1;
+    let lastMuterWidgetCount = -1;
     setInterval(() => {
       const n = (app.graph?._groups?.length || 0);
-      if (n !== lastGroupCount) {
+      const muterWidgetCount = (app.graph?._nodes || [])
+        .filter((node) => node?.type === "Fast Groups Muter (rgthree)")
+        .reduce((sum, m) => sum + (m.widgets?.length || 0), 0);
+      const placeholderCount = document.querySelectorAll(".cnv-toggle--placeholder").length;
+      const needsRerender =
+        n !== lastGroupCount ||
+        muterWidgetCount !== lastMuterWidgetCount ||
+        (placeholderCount > 0 && muterWidgetCount > 0);
+      if (needsRerender) {
         lastGroupCount = n;
+        lastMuterWidgetCount = muterWidgetCount;
         scheduleRender();
       } else {
         syncCheckboxStates();
