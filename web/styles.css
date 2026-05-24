@@ -67,25 +67,41 @@
 }
 .cnv-panel__header-collapse:hover { opacity: 0.7; }
 
-.cnv-panel__search-wrap {
+/* Toolbar replaces the old search box */
+.cnv-panel__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   padding: 5px 8px;
   background: #0a1e30;
   border-bottom: 1px solid #000;
 }
 
-.cnv-panel__search {
-  width: 100%;
-  box-sizing: border-box;
-  background: #07172a;
+.cnv-tb-btn {
+  background: #1e4f88;
   border: 1px solid #000;
   border-radius: 3px;
-  padding: 4px 7px;
-  color: #cfe3ff;
-  font: inherit;
-  outline: none;
+  color: #ffffff;
+  font: 11px/1 ui-sans-serif, system-ui, sans-serif;
+  padding: 4px 8px;
+  cursor: pointer;
 }
-.cnv-panel__search::placeholder { color: #466a91; }
-.cnv-panel__search:focus { border-color: #1e4f88; }
+.cnv-tb-btn:hover { background: #2864ad; }
+.cnv-tb-btn:active { background: #163e6e; }
+
+.cnv-tb-btn--icon {
+  padding: 4px 6px;
+  background: transparent;
+  border-color: transparent;
+  color: #6f93bf;
+  font-size: 13px;
+}
+.cnv-tb-btn--icon:hover {
+  background: rgba(255,255,255,0.06);
+  color: #ffffff;
+}
+
+.cnv-tb-spacer { flex: 1; }
 
 .cnv-panel__list {
   overflow-y: auto;
@@ -107,15 +123,6 @@
 .cnv-row:hover { background: #163657; }
 .cnv-row:last-child { border-bottom: none; }
 
-.cnv-row__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--cnv-color, #3b82f6);
-  flex-shrink: 0;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
-}
-
 .cnv-row__title {
   flex: 1;
   white-space: nowrap;
@@ -123,9 +130,6 @@
   text-overflow: ellipsis;
   color: #ffffff;
   font-size: 12px;
-}
-.cnv-row__title-prefix {
-  color: #6f93bf;
 }
 
 .cnv-row__shortcut {
@@ -161,27 +165,5 @@
 .cnv-toggle--on .cnv-toggle__knob { opacity: 1; background: #ffffff; }
 .cnv-toggle--placeholder { opacity: 0.35; cursor: default; border-style: dashed; }
 
-.cnv-row__jump {
-  background: transparent;
-  border: none;
-  color: #6f93bf;
-  cursor: pointer;
-  padding: 1px 3px;
-  font-size: 13px;
-  line-height: 1;
-}
-.cnv-row__jump:hover { color: #ffffff; }
-
-.cnv-row__menu {
-  background: transparent;
-  border: none;
-  color: #466a91;
-  cursor: pointer;
-  padding: 1px 3px;
-  font-size: 12px;
-  line-height: 1;
-}
-.cnv-row__menu:hover { color: #cfe3ff; }
-
-.cnv-panel--collapsed .cnv-panel__search-wrap,
+.cnv-panel--collapsed .cnv-panel__toolbar,
 .cnv-panel--collapsed .cnv-panel__list { display: none; }

@@ -7,7 +7,7 @@ import { app } from "../../scripts/app.js";
 // Bump on every release. Exposed on window so it's trivial to check in the
 // console (`window.__cnv_version`) whether the browser is on the latest JS
 // or still serving a cached older copy.
-const CNV_VERSION = "0.2.3";
+const CNV_VERSION = "0.3.0";
 try {
   window.__cnv_version = CNV_VERSION;
   console.info(`[comfyui-navigator] loaded v${CNV_VERSION}`);
@@ -398,25 +398,34 @@ function ensurePanel() {
       <span class="cnv-panel__header-count">0</span>
       <button class="cnv-panel__header-collapse" type="button" title="Collapse / expand">▾</button>
     </div>
-    <div class="cnv-panel__search-wrap">
-      <input class="cnv-panel__search" type="text" placeholder="Filter (typing 'qwen' filters)">
+    <div class="cnv-panel__toolbar">
+      <button class="cnv-tb-btn" type="button" data-action="enable-all" title="Turn every group ON">Enable All</button>
+      <button class="cnv-tb-btn" type="button" data-action="disable-all" title="Turn every group OFF">Disable All</button>
+      <span class="cnv-tb-spacer"></span>
+      <button class="cnv-tb-btn cnv-tb-btn--icon" type="button" data-action="settings" title="Settings (colors, shortcuts) — coming in v0.3.1">⚙</button>
     </div>
     <div class="cnv-panel__list"></div>
   `;
   document.body.appendChild(panel);
   state.panel = panel;
-  state.searchInput = panel.querySelector(".cnv-panel__search");
   state.listEl = panel.querySelector(".cnv-panel__list");
   const header = panel.querySelector(".cnv-panel__header");
   installPanelDrag(panel, header);
   applyPanelPos(panel);
 
-  state.searchInput.addEventListener("input", () => {
-    state.query = state.searchInput.value.trim().toLowerCase();
-    renderList();
+  // Toolbar actions
+  panel.querySelector('[data-action="enable-all"]').addEventListener("click", (e) => {
+    e.stopPropagation();
+    setAllMutersTo(true);
   });
-  // Stop chip clicks bubbling into canvas when typing in search
-  state.searchInput.addEventListener("keydown", (e) => e.stopPropagation());
+  panel.querySelector('[data-action="disable-all"]').addEventListener("click", (e) => {
+    e.stopPropagation();
+    setAllMutersTo(false);
+  });
+  panel.querySelector('[data-action="settings"]').addEventListener("click", (e) => {
+    e.stopPropagation();
+    alert("Settings panel (colors + configurable shortcuts) coming in v0.3.1.");
+  });
 
   const collapseBtn = panel.querySelector(".cnv-panel__header-collapse");
   try { state.collapsed = localStorage.getItem(COLLAPSE_KEY) === "1"; } catch {}
@@ -458,74 +467,43 @@ function renderList() {
   }
   panel.style.display = "";
 
-  const q = state.query;
-  const filtered = groups
-    .map((g, i) => ({ g, i, title: groupTitle(g, i) }))
-    .filter(({ title }) => !q || title.toLowerCase().includes(q));
-
   state.listEl.replaceChildren();
-  for (const { g, i, title } of filtered) {
+  for (const { g, i, title } of groups.map((g, i) => ({ g, i, title: groupTitle(g, i) }))) {
     const row = document.createElement("div");
     row.className = "cnv-row";
-    row.style.setProperty("--cnv-color", groupColorOrDefault(g));
     row.dataset.title = title;
 
     const enabled = isGroupEnabled(title);
     const hasMuter = enabled !== null;
 
-    // rgthree-style row: "● Enable Group Name  [no/yes]  →  ⋯"
     const toggleHtml = hasMuter
-      ? `<span class="cnv-toggle ${enabled ? "cnv-toggle--on" : ""}" data-toggle title="Toggle whether this group runs"><span class="cnv-toggle__label">${enabled ? "yes" : "no"}</span><span class="cnv-toggle__knob"></span></span>`
+      ? `<span class="cnv-toggle ${enabled ? "cnv-toggle--on" : ""}" data-toggle title="Click to toggle"><span class="cnv-toggle__label">${enabled ? "yes" : "no"}</span><span class="cnv-toggle__knob"></span></span>`
       : `<span class="cnv-toggle cnv-toggle--placeholder" title="No muter manages this group"><span class="cnv-toggle__label">—</span><span class="cnv-toggle__knob"></span></span>`;
 
     row.innerHTML = `
-      <span class="cnv-row__dot"></span>
-      <span class="cnv-row__title"><span class="cnv-row__title-prefix">Enable</span><span class="cnv-row__title-name"></span></span>
+      <span class="cnv-row__title"></span>
       ${i < 9 ? `<span class="cnv-row__shortcut">${i + 1}</span>` : ""}
       ${toggleHtml}
-      <button type="button" class="cnv-row__jump" title="Jump to this group">→</button>
-      <button type="button" class="cnv-row__menu" title="More actions">⋯</button>
     `;
-    row.querySelector(".cnv-row__title-name").textContent = title;
+    row.querySelector(".cnv-row__title").textContent = title;
 
-    // Toggle pill: flip muter widget, don't jump
+    // Toggle pill: flip muter widget; don't jump
     const toggle = row.querySelector("[data-toggle]");
     if (toggle) {
       toggle.addEventListener("click", (e) => {
         e.stopPropagation();
         const newState = !isGroupEnabled(title);
         setGroupEnabled(title, newState);
-        // Optimistic UI update; the periodic sync will confirm
         toggle.classList.toggle("cnv-toggle--on", newState);
         toggle.querySelector(".cnv-toggle__label").textContent = newState ? "yes" : "no";
       });
     }
 
-    // Click the row body (anywhere except toggle/jump/menu) → jump
+    // Click anywhere else on the row → jump to that group
     row.addEventListener("click", (e) => {
       if (e.button !== 0) return;
-      if (e.target.closest(".cnv-toggle, .cnv-row__menu, .cnv-row__jump")) return;
+      if (e.target.closest(".cnv-toggle")) return;
       jumpToGroup(g);
-    });
-
-    // Explicit jump button (visible affordance)
-    row.querySelector(".cnv-row__jump").addEventListener("click", (e) => {
-      e.stopPropagation();
-      jumpToGroup(g);
-    });
-
-    // Three-dot menu
-    row.querySelector(".cnv-row__menu").addEventListener("click", (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      openRowMenu(g, e);
-    });
-
-    // Right-click anywhere on row also opens menu
-    row.addEventListener("contextmenu", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      openRowMenu(g, e);
     });
 
     state.listEl.appendChild(row);
