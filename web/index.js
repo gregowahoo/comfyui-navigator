@@ -293,9 +293,25 @@ function resetMuteAll() {
 
 // --- right-click chip menu ---------------------------------------------
 
+async function queuePromptSafely() {
+  // Try the standard app.queuePrompt API path first; fall back to clicking
+  // the Run button if the API shape changes.
+  try {
+    if (typeof app.queuePrompt === "function") {
+      await app.queuePrompt(0); // 0 = end of queue
+      return true;
+    }
+  } catch (e) { console.warn("[comfyui-navigator] app.queuePrompt threw:", e); }
+  // Fallback: simulate a click on the Run button
+  const runBtn = Array.from(document.querySelectorAll("button")).find((b) => /^run( |$)/i.test(b.textContent.trim()));
+  if (runBtn) { runBtn.click(); return true; }
+  console.warn("[comfyui-navigator] could not queue prompt — no API and no Run button found");
+  return false;
+}
+
 function openRowMenu(g, evt) {
   const muterCount = findFastGroupsMuters().length;
-  const muterLabel = muterCount ? `(via ${muterCount} rgthree muter${muterCount === 1 ? '' : 's'})` : "(per-node fallback)";
+  const muterScope = muterCount ? `via ${muterCount} rgthree muter${muterCount === 1 ? "" : "s"}` : "per-node fallback";
   const opts = [
     { content: "Jump here", callback: () => jumpToGroup(g) },
     { content: "Center only (no zoom change)", callback: () => {
@@ -310,7 +326,20 @@ function openRowMenu(g, evt) {
       animatePanZoom([targetOffsetX, targetOffsetY], c.ds.scale);
     }},
     null,
-    { content: `Solo run this group ${muterLabel}`, callback: () => soloGroup(g) },
+    {
+      content: `Solo & Run this group  (${muterScope})`,
+      callback: async () => {
+        soloGroup(g);
+        // Give the muter callbacks a tick to settle, then queue
+        await new Promise((r) => setTimeout(r, 60));
+        await queuePromptSafely();
+      },
+    },
+    {
+      content: `Solo only (mute others, don't run)  (${muterScope})`,
+      callback: () => soloGroup(g),
+    },
+    null,
     { content: "Reset (enable all groups)", callback: () => resetMuteAll() },
   ];
   new LiteGraph.ContextMenu(opts, { event: evt });
