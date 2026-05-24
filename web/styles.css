@@ -1,9 +1,16 @@
-/* comfyui-navigator: panel styled to mirror the rgthree Fast Groups Muter
-   node's actual visual treatment — dark teal body, blue header bar,
-   tight rows with "Enable X" + toggle pill + nav arrow. Flat, no fancy
-   shadows; meant to look like the rgthree node lifted off the canvas. */
+/* comfyui-navigator panel. Colors are CSS variables so the runtime
+   settings panel can override them; defaults match rgthree's Fast
+   Groups Muter aesthetic. */
 
 .cnv-panel {
+  --cnv-bg: #0e283f;
+  --cnv-header-bg: #1e4f88;
+  --cnv-accent: #2864ad;
+  --cnv-text: #ffffff;
+  --cnv-text-dim: #6f93bf;
+  --cnv-row-hover: #163657;
+  --cnv-border: #000000;
+
   position: fixed;
   top: 80px;
   right: 12px;
@@ -11,11 +18,11 @@
   max-height: calc(100vh - 120px);
   display: flex;
   flex-direction: column;
-  background: #0e283f;        /* rgthree muter body color */
-  border: 1px solid #000000;
+  background: var(--cnv-bg);
+  border: 1px solid var(--cnv-border);
   border-radius: 8px;
   font: 12px/1.3 ui-sans-serif, system-ui, sans-serif;
-  color: #e5e7eb;
+  color: var(--cnv-text);
   user-select: none;
   z-index: 1000;
   overflow: hidden;
@@ -31,8 +38,8 @@
   align-items: center;
   gap: 6px;
   padding: 8px 10px;
-  background: #1e4f88;
-  color: #ffffff;
+  background: var(--cnv-header-bg);
+  color: var(--cnv-text);
   cursor: grab;
   font-size: 12px;
   font-weight: 500;
@@ -78,16 +85,16 @@
 }
 
 .cnv-tb-btn {
-  background: #1e4f88;
-  border: 1px solid #000;
+  background: var(--cnv-header-bg);
+  border: 1px solid var(--cnv-border);
   border-radius: 3px;
-  color: #ffffff;
+  color: var(--cnv-text);
   font: 11px/1 ui-sans-serif, system-ui, sans-serif;
   padding: 4px 8px;
   cursor: pointer;
 }
-.cnv-tb-btn:hover { background: #2864ad; }
-.cnv-tb-btn:active { background: #163e6e; }
+.cnv-tb-btn:hover { background: var(--cnv-accent); }
+.cnv-tb-btn:active { filter: brightness(0.8); }
 
 .cnv-tb-btn--icon {
   padding: 4px 6px;
@@ -115,12 +122,12 @@
   align-items: center;
   gap: 6px;
   padding: 4px 8px;
-  background: #0e283f;
-  border-bottom: 1px solid #000;
+  background: var(--cnv-bg);
+  border-bottom: 1px solid var(--cnv-border);
   cursor: pointer;
   min-height: 24px;
 }
-.cnv-row:hover { background: #163657; }
+.cnv-row:hover { background: var(--cnv-row-hover); }
 .cnv-row:last-child { border-bottom: none; }
 
 .cnv-row__title {
@@ -162,8 +169,115 @@
   opacity: 0.4;
 }
 .cnv-toggle__label { line-height: 1; }
-.cnv-toggle--on .cnv-toggle__knob { opacity: 1; background: #ffffff; }
+.cnv-toggle--on { color: var(--cnv-text); }
+.cnv-toggle--on .cnv-toggle__knob { opacity: 1; background: var(--cnv-accent); box-shadow: 0 0 6px var(--cnv-accent); }
 .cnv-toggle--placeholder { opacity: 0.35; cursor: default; border-style: dashed; }
 
 .cnv-panel--collapsed .cnv-panel__toolbar,
-.cnv-panel--collapsed .cnv-panel__list { display: none; }
+.cnv-panel--collapsed .cnv-panel__list,
+.cnv-panel--collapsed .cnv-settings { display: none; }
+
+/* Settings panel — slides in below toolbar when ⚙ clicked */
+.cnv-settings {
+  background: #0a1e30;
+  border-bottom: 1px solid var(--cnv-border);
+  padding: 10px;
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+}
+.cnv-settings--open { display: flex; }
+
+.cnv-settings__section-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--cnv-text-dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.cnv-color-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+.cnv-color-row__label { color: var(--cnv-text-dim); }
+.cnv-color-row input[type="color"] {
+  width: 28px;
+  height: 22px;
+  border: 1px solid var(--cnv-border);
+  border-radius: 3px;
+  cursor: pointer;
+  padding: 0;
+  background: transparent;
+}
+
+.cnv-shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+.cnv-shortcut-row__key {
+  width: 36px;
+  text-align: center;
+  background: #07172a;
+  border: 1px solid var(--cnv-border);
+  border-radius: 3px;
+  color: var(--cnv-text);
+  font: 11px ui-monospace, monospace;
+  padding: 3px 0;
+  outline: none;
+}
+.cnv-shortcut-row__key:focus { border-color: var(--cnv-accent); }
+.cnv-shortcut-row__group {
+  flex: 1;
+  background: #07172a;
+  border: 1px solid var(--cnv-border);
+  border-radius: 3px;
+  color: var(--cnv-text);
+  font: 11px ui-sans-serif, system-ui, sans-serif;
+  padding: 3px 5px;
+  outline: none;
+}
+.cnv-shortcut-row__remove {
+  background: transparent;
+  border: none;
+  color: var(--cnv-text-dim);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 4px;
+}
+.cnv-shortcut-row__remove:hover { color: #ef4444; }
+
+.cnv-settings__add-btn {
+  background: transparent;
+  border: 1px dashed var(--cnv-text-dim);
+  border-radius: 3px;
+  color: var(--cnv-text-dim);
+  cursor: pointer;
+  padding: 4px;
+  font-size: 11px;
+}
+.cnv-settings__add-btn:hover {
+  color: var(--cnv-text);
+  border-color: var(--cnv-accent);
+}
+
+.cnv-settings__reset {
+  background: transparent;
+  border: 1px solid var(--cnv-border);
+  border-radius: 3px;
+  color: var(--cnv-text-dim);
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 10px;
+  align-self: flex-end;
+}
+.cnv-settings__reset:hover { color: #ef4444; }

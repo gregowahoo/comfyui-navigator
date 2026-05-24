@@ -7,7 +7,7 @@ import { app } from "../../scripts/app.js";
 // Bump on every release. Exposed on window so it's trivial to check in the
 // console (`window.__cnv_version`) whether the browser is on the latest JS
 // or still serving a cached older copy.
-const CNV_VERSION = "0.3.0";
+const CNV_VERSION = "0.3.1";
 try {
   window.__cnv_version = CNV_VERSION;
   console.info(`[comfyui-navigator] loaded v${CNV_VERSION}`);
@@ -17,6 +17,56 @@ const STYLE_ID = "cnv-styles";
 const PANEL_ID = "cnv-panel";
 const POS_KEY = "comfyui-navigator.panel-pos";
 const COLLAPSE_KEY = "comfyui-navigator.collapsed";
+const COLORS_KEY = "comfyui-navigator.colors";
+const SHORTCUTS_KEY = "comfyui-navigator.shortcuts";
+
+const COLOR_FIELDS = [
+  { key: "--cnv-bg",        label: "Body background",   default: "#0e283f" },
+  { key: "--cnv-header-bg", label: "Header bar",        default: "#1e4f88" },
+  { key: "--cnv-accent",    label: "Accent (on toggle)",default: "#2864ad" },
+  { key: "--cnv-row-hover", label: "Row hover",         default: "#163657" },
+];
+
+function loadColors() {
+  try {
+    const v = localStorage.getItem(COLORS_KEY);
+    if (v) return JSON.parse(v);
+  } catch {}
+  return {};
+}
+function saveColors(map) {
+  try { localStorage.setItem(COLORS_KEY, JSON.stringify(map)); } catch {}
+}
+function applyColors(panel) {
+  const stored = loadColors();
+  for (const { key, default: def } of COLOR_FIELDS) {
+    panel.style.setProperty(key, stored[key] || def);
+  }
+}
+
+/** Shortcuts are stored as { "key char": "Group Title" }.
+ *  Defaults (when nothing is set): 1..9 → first 9 navigable groups by order. */
+function loadShortcuts() {
+  try {
+    const v = localStorage.getItem(SHORTCUTS_KEY);
+    if (v) return JSON.parse(v);
+  } catch {}
+  return null; // null = use defaults
+}
+function saveShortcuts(map) {
+  try { localStorage.setItem(SHORTCUTS_KEY, JSON.stringify(map)); } catch {}
+}
+function resolveShortcut(key) {
+  const map = loadShortcuts();
+  if (map) return map[key] || null;
+  // Default: 1..9 → first 9 groups
+  if (key >= "1" && key <= "9") {
+    const idx = parseInt(key, 10) - 1;
+    const g = getNavigableGroups()[idx];
+    return g ? groupTitle(g, idx) : null;
+  }
+  return null;
+}
 
 const state = {
   panel: null,
@@ -402,8 +452,9 @@ function ensurePanel() {
       <button class="cnv-tb-btn" type="button" data-action="enable-all" title="Turn every group ON">Enable All</button>
       <button class="cnv-tb-btn" type="button" data-action="disable-all" title="Turn every group OFF">Disable All</button>
       <span class="cnv-tb-spacer"></span>
-      <button class="cnv-tb-btn cnv-tb-btn--icon" type="button" data-action="settings" title="Settings (colors, shortcuts) — coming in v0.3.1">⚙</button>
+      <button class="cnv-tb-btn cnv-tb-btn--icon" type="button" data-action="settings" title="Settings: colors, shortcuts">⚙</button>
     </div>
+    <div class="cnv-settings" data-settings></div>
     <div class="cnv-panel__list"></div>
   `;
   document.body.appendChild(panel);
@@ -422,10 +473,15 @@ function ensurePanel() {
     e.stopPropagation();
     setAllMutersTo(false);
   });
+  const settingsEl = panel.querySelector("[data-settings]");
   panel.querySelector('[data-action="settings"]').addEventListener("click", (e) => {
     e.stopPropagation();
-    alert("Settings panel (colors + configurable shortcuts) coming in v0.3.1.");
+    const open = settingsEl.classList.toggle("cnv-settings--open");
+    if (open) buildSettings(settingsEl);
   });
+
+  // Apply saved colors on initial render
+  applyColors(panel);
 
   const collapseBtn = panel.querySelector(".cnv-panel__header-collapse");
   try { state.collapsed = localStorage.getItem(COLLAPSE_KEY) === "1"; } catch {}
@@ -439,6 +495,110 @@ function ensurePanel() {
 
   return panel;
 }
+
+function buildSettings(el) {
+  const stored = loadColors();
+  const shortcuts = loadShortcuts() || {};
+  const groups = getNavigableGroups().map((g, i) => groupTitle(g, i));
+
+  // Colors section
+  const colorRows = COLOR_FIELDS.map(({ key, label, default: def }) => `
+    <div class="cnv-color-row">
+      <span class="cnv-color-row__label">${label}</span>
+      <input type="color" data-color-key="${key}" value="${stored[key] || def}">
+    </div>
+  `).join("");
+
+  // Shortcuts section
+  const shortcutEntries = Object.entries(shortcuts);
+  const shortcutRows = shortcutEntries.map(([key, title]) => renderShortcutRow(key, title, groups)).join("");
+
+  el.innerHTML = `
+    <div>
+      <div class="cnv-settings__section-title">Colors</div>
+      ${colorRows}
+    </div>
+    <div>
+      <div class="cnv-settings__section-title">Keyboard shortcuts ${shortcutEntries.length === 0 ? "(default: 1–9 jump to first 9 groups)" : "(overrides defaults)"}</div>
+      <div data-shortcut-list>${shortcutRows}</div>
+      <button class="cnv-settings__add-btn" type="button" data-add-shortcut>+ Add shortcut</button>
+    </div>
+    <button class="cnv-settings__reset" type="button" data-reset>Reset all settings</button>
+  `;
+
+  // Color picker handlers
+  for (const input of el.querySelectorAll('input[type="color"]')) {
+    input.addEventListener("input", () => {
+      const next = { ...loadColors(), [input.dataset.colorKey]: input.value };
+      saveColors(next);
+      applyColors(state.panel);
+    });
+  }
+
+  // Shortcut row handlers (delegated)
+  const list = el.querySelector("[data-shortcut-list]");
+  list.addEventListener("change", onShortcutChange);
+  list.addEventListener("click", (e) => {
+    if (e.target.matches("[data-remove]")) {
+      const row = e.target.closest(".cnv-shortcut-row");
+      row?.remove();
+      persistShortcutsFromDom(el);
+    }
+  });
+
+  // Add-shortcut button
+  el.querySelector("[data-add-shortcut]").addEventListener("click", () => {
+    const tmp = document.createElement("div");
+    tmp.innerHTML = renderShortcutRow("", "", groups);
+    list.appendChild(tmp.firstElementChild);
+    persistShortcutsFromDom(el);
+  });
+
+  // Reset
+  el.querySelector("[data-reset]").addEventListener("click", () => {
+    if (!confirm("Reset all colors and shortcuts to defaults?")) return;
+    try { localStorage.removeItem(COLORS_KEY); } catch {}
+    try { localStorage.removeItem(SHORTCUTS_KEY); } catch {}
+    applyColors(state.panel);
+    buildSettings(el);
+  });
+}
+
+function renderShortcutRow(key, title, groups) {
+  const options = ['<option value="">— select group —</option>']
+    .concat(groups.map((g) => `<option value="${escapeAttr(g)}" ${g === title ? "selected" : ""}>${escapeHtml(g)}</option>`))
+    .join("");
+  return `
+    <div class="cnv-shortcut-row">
+      <input class="cnv-shortcut-row__key" data-shortcut-key value="${escapeAttr(key)}" maxlength="1" placeholder="?">
+      <select class="cnv-shortcut-row__group" data-shortcut-group>${options}</select>
+      <button class="cnv-shortcut-row__remove" type="button" data-remove title="Remove">×</button>
+    </div>
+  `;
+}
+
+function onShortcutChange(e) {
+  if (e.target.matches("[data-shortcut-key], [data-shortcut-group]")) {
+    // Normalize key to lowercase single char
+    if (e.target.matches("[data-shortcut-key]")) {
+      e.target.value = (e.target.value || "").slice(0, 1).toLowerCase();
+    }
+    persistShortcutsFromDom(state.panel.querySelector("[data-settings]"));
+  }
+}
+
+function persistShortcutsFromDom(settingsEl) {
+  const map = {};
+  for (const row of settingsEl.querySelectorAll(".cnv-shortcut-row")) {
+    const k = row.querySelector("[data-shortcut-key]").value.trim();
+    const g = row.querySelector("[data-shortcut-group]").value;
+    if (k && g) map[k] = g;
+  }
+  saveShortcuts(map);
+}
+
+function escapeAttr(s) { return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;"); }
+function escapeHtml(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 
 function applyCollapsed() {
   if (!state.panel) return;
@@ -541,13 +701,19 @@ function isTypingTarget(el) {
 
 function onKeyDown(e) {
   if (isTypingTarget(document.activeElement)) return;
-  // 1..9 → jump (same filtered list the panel shows)
-  if (e.key >= "1" && e.key <= "9" && !e.ctrlKey && !e.metaKey && !e.altKey) {
-    const idx = parseInt(e.key, 10) - 1;
-    const g = getNavigableGroups()[idx];
-    if (g) {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  // Single-character keys only — modifier-free
+  const k = (e.key || "").toLowerCase();
+  if (k.length !== 1) return;
+  const targetTitle = resolveShortcut(k);
+  if (!targetTitle) return;
+  // Find the group whose title matches
+  const groups = getNavigableGroups();
+  for (let i = 0; i < groups.length; i++) {
+    if (groupTitle(groups[i], i) === targetTitle) {
       e.preventDefault();
-      jumpToGroup(g);
+      jumpToGroup(groups[i]);
+      return;
     }
   }
 }
