@@ -1,15 +1,19 @@
+/* comfyui-navigator: floating panel styled to mirror rgthree's
+   Fast Groups Muter aesthetic. Lives in DOM (not canvas) so it
+   renders at constant size regardless of canvas zoom. */
+
 .cnv-panel {
   position: fixed;
   top: 80px;
   right: 12px;
-  width: 240px;
+  width: 280px;
   max-height: calc(100vh - 120px);
   display: flex;
   flex-direction: column;
-  background: rgba(15, 23, 42, 0.94);
-  border: 1px solid #3b82f6;
-  border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  background: #122438;
+  border: 1px solid #1e3a5f;
+  border-radius: 6px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
   font: 12px/1.3 ui-sans-serif, system-ui, sans-serif;
   color: #e5e7eb;
   user-select: none;
@@ -17,106 +21,99 @@
   overflow: hidden;
 }
 
-.cnv-panel--dragging { opacity: 0.85; }
+.cnv-panel--dragging { opacity: 0.9; }
 .cnv-panel--dragging * { cursor: grabbing !important; }
 
+/* Header — looks like rgthree's muter title bar */
 .cnv-panel__header {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  background: rgba(30, 41, 59, 0.95);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: #1c4a86;
+  border-bottom: 1px solid #0f2745;
   cursor: grab;
+  color: #ffffff;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.05em;
-  color: #60a5fa;
-  text-transform: uppercase;
-  font-size: 10px;
 }
 
-.cnv-panel__header-grip { opacity: 0.6; }
+.cnv-panel__header-grip {
+  opacity: 0.5;
+  font-size: 11px;
+}
 
-.cnv-panel__header-title { flex: 1; }
+.cnv-panel__header-title {
+  flex: 1;
+}
 
 .cnv-panel__header-count {
-  background: rgba(96, 165, 250, 0.18);
-  color: #93c5fd;
+  background: rgba(255, 255, 255, 0.16);
+  color: #cfe3ff;
   border-radius: 999px;
   padding: 1px 7px;
   font-size: 10px;
+  font-weight: 500;
 }
 
 .cnv-panel__header-collapse {
   background: transparent;
   border: none;
-  color: #94a3b8;
+  color: #cfe3ff;
   cursor: pointer;
   font-size: 12px;
   padding: 0 4px;
   border-radius: 4px;
 }
-.cnv-panel__header-collapse:hover { color: #e5e7eb; background: rgba(255,255,255,0.06); }
+.cnv-panel__header-collapse:hover { background: rgba(255,255,255,0.12); }
 
 .cnv-panel__search-wrap {
   padding: 6px 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: #0f1f33;
 }
 
 .cnv-panel__search {
   width: 100%;
   box-sizing: border-box;
   background: rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
   padding: 5px 8px;
   color: #e5e7eb;
   font: inherit;
   outline: none;
 }
+.cnv-panel__search::placeholder { color: #5b7a9b; }
 .cnv-panel__search:focus { border-color: #60a5fa; }
 
 .cnv-panel__list {
   overflow-y: auto;
   flex: 1;
-  padding: 4px;
+  padding: 0;
 }
 
+/* Each row mimics rgthree's "Enable X    [no/yes] →" widget */
 .cnv-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 6px;
-  border-radius: 6px;
+  padding: 5px 10px 5px 8px;
   cursor: pointer;
-  border-left: 3px solid var(--cnv-color, #3b82f6);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  background: #163152;
 }
-.cnv-row:hover { background: rgba(255, 255, 255, 0.06); }
-.cnv-row--active { background: rgba(96, 165, 250, 0.14); }
-
-.cnv-row__cb {
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  cursor: pointer;
-  accent-color: var(--cnv-color, #3b82f6);
-  flex-shrink: 0;
-}
-.cnv-row__cb--placeholder {
-  display: inline-block;
-  width: 14px;
-  height: 14px;
-  border-radius: 3px;
-  border: 1px dashed rgba(255, 255, 255, 0.15);
-  background: transparent;
-}
+.cnv-row:hover { background: #1b3d68; }
+.cnv-row:nth-child(even) { background: #143055; }
+.cnv-row:nth-child(even):hover { background: #1b3d68; }
 
 .cnv-row__dot {
-  width: 7px;
-  height: 7px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   background: var(--cnv-color, #3b82f6);
   flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
 }
 
 .cnv-row__title {
@@ -124,33 +121,78 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: #e5e7eb;
+}
+.cnv-row__title-prefix {
+  color: #7fa3cf;
+  margin-right: 4px;
 }
 
 .cnv-row__shortcut {
   font-size: 10px;
-  color: #64748b;
-  background: rgba(255, 255, 255, 0.06);
+  color: #5b7a9b;
+  background: rgba(255, 255, 255, 0.04);
   border-radius: 3px;
   padding: 1px 5px;
   font-family: ui-monospace, monospace;
 }
 
-.cnv-row__jump,
+/* The toggle pill — rgthree-style "no/yes" with a colored dot */
+.cnv-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #0c1c30;
+  border: 1px solid #2a4a78;
+  border-radius: 999px;
+  padding: 2px 8px 2px 6px;
+  cursor: pointer;
+  font-size: 11px;
+  color: #7fa3cf;
+  min-width: 50px;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.cnv-toggle__knob {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #5b7a9b;
+  transition: background 120ms;
+}
+.cnv-toggle__label { line-height: 1; }
+.cnv-toggle--on { color: #a3c8f7; }
+.cnv-toggle--on .cnv-toggle__knob { background: #60a5fa; box-shadow: 0 0 6px rgba(96, 165, 250, 0.7); }
+.cnv-toggle--placeholder {
+  opacity: 0.4;
+  cursor: default;
+  border-style: dashed;
+}
+
+/* Right-arrow nav button */
+.cnv-row__jump {
+  background: transparent;
+  border: none;
+  color: #7fa3cf;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 14px;
+  line-height: 1;
+}
+.cnv-row__jump:hover { background: rgba(255, 255, 255, 0.1); color: #ffffff; }
+
 .cnv-row__menu {
   background: transparent;
   border: none;
-  color: #94a3b8;
+  color: #5b7a9b;
   cursor: pointer;
   padding: 1px 4px;
-  border-radius: 4px;
-  font-size: 13px;
+  border-radius: 3px;
+  font-size: 12px;
   line-height: 1;
 }
-.cnv-row__jump:hover,
-.cnv-row__menu:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #e5e7eb;
-}
+.cnv-row__menu:hover { background: rgba(255, 255, 255, 0.08); color: #cfe3ff; }
 
 .cnv-panel--collapsed .cnv-panel__search-wrap,
 .cnv-panel--collapsed .cnv-panel__list { display: none; }

@@ -7,7 +7,7 @@ import { app } from "../../scripts/app.js";
 // Bump on every release. Exposed on window so it's trivial to check in the
 // console (`window.__cnv_version`) whether the browser is on the latest JS
 // or still serving a cached older copy.
-const CNV_VERSION = "0.1.0";
+const CNV_VERSION = "0.2.0";
 try {
   window.__cnv_version = CNV_VERSION;
   console.info(`[comfyui-navigator] loaded v${CNV_VERSION}`);
@@ -460,31 +460,40 @@ function renderList() {
     row.dataset.title = title;
 
     const enabled = isGroupEnabled(title);
-    const showCheckbox = enabled !== null; // null = no muter manages this group
+    const hasMuter = enabled !== null;
+
+    // rgthree-style row: "● Enable Group Name  [no/yes]  →  ⋯"
+    const toggleHtml = hasMuter
+      ? `<span class="cnv-toggle ${enabled ? "cnv-toggle--on" : ""}" data-toggle title="Toggle whether this group runs"><span class="cnv-toggle__label">${enabled ? "yes" : "no"}</span><span class="cnv-toggle__knob"></span></span>`
+      : `<span class="cnv-toggle cnv-toggle--placeholder" title="No muter manages this group"><span class="cnv-toggle__label">—</span><span class="cnv-toggle__knob"></span></span>`;
 
     row.innerHTML = `
-      ${showCheckbox ? `<input type="checkbox" class="cnv-row__cb" ${enabled ? "checked" : ""} title="Toggle whether this group runs">` : `<span class="cnv-row__cb cnv-row__cb--placeholder" title="No muter manages this group"></span>`}
       <span class="cnv-row__dot"></span>
-      <span class="cnv-row__title"></span>
+      <span class="cnv-row__title"><span class="cnv-row__title-prefix">Enable</span><span class="cnv-row__title-name"></span></span>
       ${i < 9 ? `<span class="cnv-row__shortcut">${i + 1}</span>` : ""}
+      ${toggleHtml}
       <button type="button" class="cnv-row__jump" title="Jump to this group">→</button>
       <button type="button" class="cnv-row__menu" title="More actions">⋯</button>
     `;
-    row.querySelector(".cnv-row__title").textContent = title;
+    row.querySelector(".cnv-row__title-name").textContent = title;
 
-    // Checkbox: toggle muter widget (don't jump)
-    const cb = row.querySelector("input.cnv-row__cb");
-    if (cb) {
-      cb.addEventListener("click", (e) => e.stopPropagation());
-      cb.addEventListener("change", (e) => {
-        setGroupEnabled(title, cb.checked);
+    // Toggle pill: flip muter widget, don't jump
+    const toggle = row.querySelector("[data-toggle]");
+    if (toggle) {
+      toggle.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const newState = !isGroupEnabled(title);
+        setGroupEnabled(title, newState);
+        // Optimistic UI update; the periodic sync will confirm
+        toggle.classList.toggle("cnv-toggle--on", newState);
+        toggle.querySelector(".cnv-toggle__label").textContent = newState ? "yes" : "no";
       });
     }
 
-    // Click the row body (anywhere except checkbox/jump/menu) → jump
+    // Click the row body (anywhere except toggle/jump/menu) → jump
     row.addEventListener("click", (e) => {
       if (e.button !== 0) return;
-      if (e.target.closest(".cnv-row__cb, .cnv-row__menu")) return;
+      if (e.target.closest(".cnv-toggle, .cnv-row__menu, .cnv-row__jump")) return;
       jumpToGroup(g);
     });
 
@@ -520,11 +529,16 @@ function syncCheckboxStates() {
   if (!state.listEl) return;
   for (const row of state.listEl.querySelectorAll(".cnv-row")) {
     const title = row.dataset.title;
-    const cb = row.querySelector("input.cnv-row__cb");
-    if (!cb) continue;
+    const toggle = row.querySelector(".cnv-toggle[data-toggle]");
+    if (!toggle) continue;
     const enabled = isGroupEnabled(title);
     if (enabled === null) continue;
-    if (cb.checked !== enabled) cb.checked = enabled;
+    const labelEl = toggle.querySelector(".cnv-toggle__label");
+    const isCurrentlyOn = toggle.classList.contains("cnv-toggle--on");
+    if (isCurrentlyOn !== enabled) {
+      toggle.classList.toggle("cnv-toggle--on", enabled);
+      if (labelEl) labelEl.textContent = enabled ? "yes" : "no";
+    }
   }
 }
 
