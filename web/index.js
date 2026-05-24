@@ -90,6 +90,19 @@ function getGroups() {
   return (app.graph?._groups || []).filter(Boolean);
 }
 
+/** The groups the panel actually navigates between. If the workflow has any
+ *  Fast Groups Muter, we mirror the *primary* one (= the muter with the most
+ *  managed widgets). That respects the user's matchColors partition: a sub-
+ *  group with a different color belongs to a smaller muter and gets filtered
+ *  out of the nav list. If no muter exists, fall back to every group. */
+function getNavigableGroups() {
+  const all = getGroups();
+  const muters = getMutersAndWidgets();
+  if (muters.length === 0) return all;
+  const primary = muters.reduce((a, b) => (a.widgets.size >= b.widgets.size ? a : b));
+  return all.filter((g, i) => primary.widgets.has(groupTitle(g, i)));
+}
+
 function groupBounds(g) {
   // LiteGraph stores bounding as [x, y, w, h]
   const b = g._bounding || g.bounding;
@@ -360,9 +373,16 @@ function applyCollapsed() {
 
 function renderList() {
   const panel = ensurePanel();
-  const groups = getGroups();
+  const allGroupCount = getGroups().length;
+  const groups = getNavigableGroups();
   const countEl = panel.querySelector(".cnv-panel__header-count");
-  countEl.textContent = String(groups.length);
+  const filteredOut = allGroupCount - groups.length;
+  countEl.textContent = filteredOut > 0
+    ? `${groups.length} / ${allGroupCount}`
+    : String(groups.length);
+  countEl.title = filteredOut > 0
+    ? `Showing ${groups.length} groups (${filteredOut} sub-group${filteredOut === 1 ? "" : "s"} hidden via matchColors)`
+    : `${groups.length} groups`;
 
   // Hide panel entirely if fewer than 2 groups (nothing to navigate between)
   if (groups.length < 2) {
@@ -410,10 +430,10 @@ function isTypingTarget(el) {
 
 function onKeyDown(e) {
   if (isTypingTarget(document.activeElement)) return;
-  // 1..9 → jump
+  // 1..9 → jump (same filtered list the panel shows)
   if (e.key >= "1" && e.key <= "9" && !e.ctrlKey && !e.metaKey && !e.altKey) {
     const idx = parseInt(e.key, 10) - 1;
-    const g = getGroups()[idx];
+    const g = getNavigableGroups()[idx];
     if (g) {
       e.preventDefault();
       jumpToGroup(g);
