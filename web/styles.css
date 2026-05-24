@@ -1,45 +1,46 @@
-/* comfyui-navigator: floating panel styled to mirror rgthree's
-   Fast Groups Muter aesthetic. Lives in DOM (not canvas) so it
-   renders at constant size regardless of canvas zoom. */
+/* comfyui-navigator: panel styled to mirror the rgthree Fast Groups Muter
+   node's actual visual treatment — dark teal body, blue header bar,
+   tight rows with "Enable X" + toggle pill + nav arrow. Flat, no fancy
+   shadows; meant to look like the rgthree node lifted off the canvas. */
 
 .cnv-panel {
   position: fixed;
   top: 80px;
   right: 12px;
-  width: 280px;
+  width: 290px;
   max-height: calc(100vh - 120px);
   display: flex;
   flex-direction: column;
-  background: #122438;
-  border: 1px solid #1e3a5f;
-  border-radius: 6px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+  background: #0e283f;        /* rgthree muter body color */
+  border: 1px solid #000000;
+  border-radius: 8px;
   font: 12px/1.3 ui-sans-serif, system-ui, sans-serif;
   color: #e5e7eb;
   user-select: none;
   z-index: 1000;
   overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
 }
 
-.cnv-panel--dragging { opacity: 0.9; }
+.cnv-panel--dragging { opacity: 0.92; }
 .cnv-panel--dragging * { cursor: grabbing !important; }
 
-/* Header — looks like rgthree's muter title bar */
+/* Header = the muter's title bar */
 .cnv-panel__header {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
-  background: #1c4a86;
-  border-bottom: 1px solid #0f2745;
-  cursor: grab;
+  padding: 8px 10px;
+  background: #1e4f88;
   color: #ffffff;
-  font-size: 11px;
-  font-weight: 600;
+  cursor: grab;
+  font-size: 12px;
+  font-weight: 500;
+  text-shadow: 0 1px 0 rgba(0,0,0,0.4);
 }
 
 .cnv-panel__header-grip {
-  opacity: 0.5;
+  opacity: 0.55;
   font-size: 11px;
 }
 
@@ -48,44 +49,43 @@
 }
 
 .cnv-panel__header-count {
-  background: rgba(255, 255, 255, 0.16);
-  color: #cfe3ff;
+  background: rgba(0, 0, 0, 0.25);
+  color: #ffffff;
   border-radius: 999px;
-  padding: 1px 7px;
+  padding: 1px 8px;
   font-size: 10px;
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .cnv-panel__header-collapse {
   background: transparent;
   border: none;
-  color: #cfe3ff;
+  color: #ffffff;
   cursor: pointer;
   font-size: 12px;
   padding: 0 4px;
-  border-radius: 4px;
 }
-.cnv-panel__header-collapse:hover { background: rgba(255,255,255,0.12); }
+.cnv-panel__header-collapse:hover { opacity: 0.7; }
 
 .cnv-panel__search-wrap {
-  padding: 6px 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  background: #0f1f33;
+  padding: 5px 8px;
+  background: #0a1e30;
+  border-bottom: 1px solid #000;
 }
 
 .cnv-panel__search {
   width: 100%;
   box-sizing: border-box;
-  background: rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-  padding: 5px 8px;
-  color: #e5e7eb;
+  background: #07172a;
+  border: 1px solid #000;
+  border-radius: 3px;
+  padding: 4px 7px;
+  color: #cfe3ff;
   font: inherit;
   outline: none;
 }
-.cnv-panel__search::placeholder { color: #5b7a9b; }
-.cnv-panel__search:focus { border-color: #60a5fa; }
+.cnv-panel__search::placeholder { color: #466a91; }
+.cnv-panel__search:focus { border-color: #1e4f88; }
 
 .cnv-panel__list {
   overflow-y: auto;
@@ -93,27 +93,27 @@
   padding: 0;
 }
 
-/* Each row mimics rgthree's "Enable X    [no/yes] →" widget */
+/* Rows mirror the muter's widget rows */
 .cnv-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 10px 5px 8px;
+  padding: 4px 8px;
+  background: #0e283f;
+  border-bottom: 1px solid #000;
   cursor: pointer;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-  background: #163152;
+  min-height: 24px;
 }
-.cnv-row:hover { background: #1b3d68; }
-.cnv-row:nth-child(even) { background: #143055; }
-.cnv-row:nth-child(even):hover { background: #1b3d68; }
+.cnv-row:hover { background: #163657; }
+.cnv-row:last-child { border-bottom: none; }
 
 .cnv-row__dot {
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--cnv-color, #3b82f6);
   flex-shrink: 0;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
 }
 
 .cnv-row__title {
@@ -121,35 +121,32 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: #e5e7eb;
+  color: #ffffff;
+  font-size: 12px;
 }
 .cnv-row__title-prefix {
-  color: #7fa3cf;
-  margin-right: 4px;
+  color: #6f93bf;
 }
 
 .cnv-row__shortcut {
   font-size: 10px;
-  color: #5b7a9b;
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 3px;
-  padding: 1px 5px;
+  color: #466a91;
   font-family: ui-monospace, monospace;
 }
 
-/* The toggle pill — rgthree-style "no/yes" with a colored dot */
+/* Toggle = compact pill like rgthree's "no/yes + circle" */
 .cnv-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  background: #0c1c30;
-  border: 1px solid #2a4a78;
+  gap: 5px;
+  background: #07172a;
+  border: 1px solid #000;
   border-radius: 999px;
-  padding: 2px 8px 2px 6px;
+  padding: 1px 6px 1px 4px;
   cursor: pointer;
   font-size: 11px;
-  color: #7fa3cf;
-  min-width: 50px;
+  color: #cfe3ff;
+  min-width: 42px;
   justify-content: space-between;
   flex-shrink: 0;
 }
@@ -157,42 +154,34 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #5b7a9b;
-  transition: background 120ms;
+  background: #ffffff;
+  opacity: 0.4;
 }
 .cnv-toggle__label { line-height: 1; }
-.cnv-toggle--on { color: #a3c8f7; }
-.cnv-toggle--on .cnv-toggle__knob { background: #60a5fa; box-shadow: 0 0 6px rgba(96, 165, 250, 0.7); }
-.cnv-toggle--placeholder {
-  opacity: 0.4;
-  cursor: default;
-  border-style: dashed;
-}
+.cnv-toggle--on .cnv-toggle__knob { opacity: 1; background: #ffffff; }
+.cnv-toggle--placeholder { opacity: 0.35; cursor: default; border-style: dashed; }
 
-/* Right-arrow nav button */
 .cnv-row__jump {
   background: transparent;
   border: none;
-  color: #7fa3cf;
+  color: #6f93bf;
   cursor: pointer;
-  padding: 2px 4px;
-  border-radius: 3px;
-  font-size: 14px;
+  padding: 1px 3px;
+  font-size: 13px;
   line-height: 1;
 }
-.cnv-row__jump:hover { background: rgba(255, 255, 255, 0.1); color: #ffffff; }
+.cnv-row__jump:hover { color: #ffffff; }
 
 .cnv-row__menu {
   background: transparent;
   border: none;
-  color: #5b7a9b;
+  color: #466a91;
   cursor: pointer;
-  padding: 1px 4px;
-  border-radius: 3px;
+  padding: 1px 3px;
   font-size: 12px;
   line-height: 1;
 }
-.cnv-row__menu:hover { background: rgba(255, 255, 255, 0.08); color: #cfe3ff; }
+.cnv-row__menu:hover { color: #cfe3ff; }
 
 .cnv-panel--collapsed .cnv-panel__search-wrap,
 .cnv-panel--collapsed .cnv-panel__list { display: none; }
