@@ -7,7 +7,7 @@ import { app } from "../../scripts/app.js";
 // Bump on every release. Exposed on window so it's trivial to check in the
 // console (`window.__cnv_version`) whether the browser is on the latest JS
 // or still serving a cached older copy.
-const CNV_VERSION = "0.0.6";
+const CNV_VERSION = "0.1.0";
 try {
   window.__cnv_version = CNV_VERSION;
   console.info(`[comfyui-navigator] loaded v${CNV_VERSION}`);
@@ -218,6 +218,25 @@ function findMuterOwningGroup(targetTitle) {
     if (entry.widgets.has(targetTitle)) return entry;
   }
   return null;
+}
+
+function getMuterWidgetForGroup(title) {
+  const owner = findMuterOwningGroup(title);
+  return owner ? owner.widgets.get(title) : null;
+}
+
+function isGroupEnabled(title) {
+  const w = getMuterWidgetForGroup(title);
+  return w ? !!w?.value?.toggled : null; // null = no muter manages it
+}
+
+function setGroupEnabled(title, on) {
+  const w = getMuterWidgetForGroup(title);
+  if (!w) return false;
+  setMuterWidget(w, on);
+  const owner = findMuterOwningGroup(title);
+  owner?.muter?.setDirtyCanvas?.(true, true);
+  return true;
 }
 
 function setMuterWidget(widget, toggled) {
@@ -438,22 +457,74 @@ function renderList() {
     const row = document.createElement("div");
     row.className = "cnv-row";
     row.style.setProperty("--cnv-color", groupColorOrDefault(g));
+    row.dataset.title = title;
+
+    const enabled = isGroupEnabled(title);
+    const showCheckbox = enabled !== null; // null = no muter manages this group
+
     row.innerHTML = `
+      ${showCheckbox ? `<input type="checkbox" class="cnv-row__cb" ${enabled ? "checked" : ""} title="Toggle whether this group runs">` : `<span class="cnv-row__cb cnv-row__cb--placeholder" title="No muter manages this group"></span>`}
       <span class="cnv-row__dot"></span>
       <span class="cnv-row__title"></span>
       ${i < 9 ? `<span class="cnv-row__shortcut">${i + 1}</span>` : ""}
+      <button type="button" class="cnv-row__jump" title="Jump to this group">→</button>
+      <button type="button" class="cnv-row__menu" title="More actions">⋯</button>
     `;
     row.querySelector(".cnv-row__title").textContent = title;
+
+    // Checkbox: toggle muter widget (don't jump)
+    const cb = row.querySelector("input.cnv-row__cb");
+    if (cb) {
+      cb.addEventListener("click", (e) => e.stopPropagation());
+      cb.addEventListener("change", (e) => {
+        setGroupEnabled(title, cb.checked);
+      });
+    }
+
+    // Click the row body (anywhere except checkbox/jump/menu) → jump
     row.addEventListener("click", (e) => {
       if (e.button !== 0) return;
+      if (e.target.closest(".cnv-row__cb, .cnv-row__menu")) return;
       jumpToGroup(g);
     });
+
+    // Explicit jump button (visible affordance)
+    row.querySelector(".cnv-row__jump").addEventListener("click", (e) => {
+      e.stopPropagation();
+      jumpToGroup(g);
+    });
+
+    // Three-dot menu
+    row.querySelector(".cnv-row__menu").addEventListener("click", (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      openRowMenu(g, e);
+    });
+
+    // Right-click anywhere on row also opens menu
     row.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       e.stopPropagation();
       openRowMenu(g, e);
     });
+
     state.listEl.appendChild(row);
+  }
+}
+
+/** Cheap re-sync of just the checkbox states without rebuilding the list.
+ *  Catches the case where the user toggles a widget directly on the muter
+ *  node (or via rgthree's keyboard shortcuts) and we need to reflect it in
+ *  the panel. */
+function syncCheckboxStates() {
+  if (!state.listEl) return;
+  for (const row of state.listEl.querySelectorAll(".cnv-row")) {
+    const title = row.dataset.title;
+    const cb = row.querySelector("input.cnv-row__cb");
+    if (!cb) continue;
+    const enabled = isGroupEnabled(title);
+    if (enabled === null) continue;
+    if (cb.checked !== enabled) cb.checked = enabled;
   }
 }
 
@@ -509,15 +580,18 @@ app.registerExtension({
 
     // Catch graph swaps (loading a different workflow). ComfyUI fires
     // a custom "graphConfigured" or similar; polling _groups length as
-    // a cheap fallback.
+    // a cheap fallback. Also re-sync checkbox states so that toggles
+    // made directly on the muter node propagate to the panel UI.
     let lastGroupCount = -1;
     setInterval(() => {
       const n = (app.graph?._groups?.length || 0);
       if (n !== lastGroupCount) {
         lastGroupCount = n;
         scheduleRender();
+      } else {
+        syncCheckboxStates();
       }
-    }, 800);
+    }, 600);
   },
   async loadedGraphNode() {
     scheduleRender();

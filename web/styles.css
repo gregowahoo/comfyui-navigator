@@ -85,8 +85,8 @@
 .cnv-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
+  gap: 6px;
+  padding: 4px 6px;
   border-radius: 6px;
   cursor: pointer;
   border-left: 3px solid var(--cnv-color, #3b82f6);
@@ -94,9 +94,26 @@
 .cnv-row:hover { background: rgba(255, 255, 255, 0.06); }
 .cnv-row--active { background: rgba(96, 165, 250, 0.14); }
 
+.cnv-row__cb {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--cnv-color, #3b82f6);
+  flex-shrink: 0;
+}
+.cnv-row__cb--placeholder {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  background: transparent;
+}
+
 .cnv-row__dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--cnv-color, #3b82f6);
   flex-shrink: 0;
@@ -116,6 +133,23 @@
   border-radius: 3px;
   padding: 1px 5px;
   font-family: ui-monospace, monospace;
+}
+
+.cnv-row__jump,
+.cnv-row__menu {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1;
+}
+.cnv-row__jump:hover,
+.cnv-row__menu:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e5e7eb;
 }
 
 .cnv-panel--collapsed .cnv-panel__search-wrap,
