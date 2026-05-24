@@ -65,14 +65,17 @@
 }
 
 .cnv-panel__header-collapse {
-  background: transparent;
-  border: none;
+  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
   color: #ffffff;
   cursor: pointer;
-  font-size: 12px;
-  padding: 0 4px;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 8px;
+  min-width: 24px;
 }
-.cnv-panel__header-collapse:hover { opacity: 0.7; }
+.cnv-panel__header-collapse:hover { background: rgba(255, 255, 255, 0.18); }
 
 /* Toolbar replaces the old search box */
 .cnv-panel__toolbar {

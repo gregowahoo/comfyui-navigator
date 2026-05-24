@@ -7,7 +7,7 @@ import { app } from "../../scripts/app.js";
 // Bump on every release. Exposed on window so it's trivial to check in the
 // console (`window.__cnv_version`) whether the browser is on the latest JS
 // or still serving a cached older copy.
-const CNV_VERSION = "0.3.1";
+const CNV_VERSION = "0.3.2";
 try {
   window.__cnv_version = CNV_VERSION;
   console.info(`[comfyui-navigator] loaded v${CNV_VERSION}`);
@@ -113,33 +113,54 @@ function applyPanelPos(panel) {
 
 // --- drag wiring (header is the handle) ---------------------------------
 
-function installPanelDrag(panel, handle) {
-  let dragging = false, dx = 0, dy = 0;
+function installPanelDrag(panel, handle, onClickHeader) {
+  // Treat a small-movement mousedown→up sequence on the header as a CLICK
+  // (toggles collapse). Real drags only kick in after the cursor has moved
+  // more than DRAG_THRESHOLD pixels from the start.
+  const DRAG_THRESHOLD = 4;
+  let pressed = false;       // mouse is down on header
+  let dragging = false;      // we've crossed the threshold, now in drag mode
+  let dx = 0, dy = 0;
+  let startX = 0, startY = 0;
+
   handle.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return;
-    // Don't initiate drag from buttons in the header
-    if (e.target.closest("button")) return;
+    if (e.target.closest("button")) return; // header buttons handle themselves
     e.preventDefault();
     const r = panel.getBoundingClientRect();
     dx = e.clientX - r.left;
     dy = e.clientY - r.top;
-    dragging = true;
-    panel.classList.add("cnv-panel--dragging");
+    startX = e.clientX;
+    startY = e.clientY;
+    pressed = true;
+    dragging = false;
   });
   window.addEventListener("mousemove", (e) => {
-    if (!dragging) return;
+    if (!pressed) return;
+    const distance = Math.abs(e.clientX - startX) + Math.abs(e.clientY - startY);
+    if (!dragging && distance < DRAG_THRESHOLD) return;
+    if (!dragging) {
+      dragging = true;
+      panel.classList.add("cnv-panel--dragging");
+    }
     const left = Math.max(0, Math.min(window.innerWidth - 50, e.clientX - dx));
     const top = Math.max(0, Math.min(window.innerHeight - 50, e.clientY - dy));
     panel.style.left = `${left}px`;
     panel.style.top = `${top}px`;
     panel.style.right = "auto";
   });
-  window.addEventListener("mouseup", () => {
-    if (!dragging) return;
-    dragging = false;
-    panel.classList.remove("cnv-panel--dragging");
-    const r = panel.getBoundingClientRect();
-    savePanelPos(r.left, r.top);
+  window.addEventListener("mouseup", (e) => {
+    if (!pressed) return;
+    pressed = false;
+    if (dragging) {
+      dragging = false;
+      panel.classList.remove("cnv-panel--dragging");
+      const r = panel.getBoundingClientRect();
+      savePanelPos(r.left, r.top);
+    } else {
+      // Stayed within threshold → treat as click
+      if (typeof onClickHeader === "function") onClickHeader(e);
+    }
   });
 }
 
@@ -461,7 +482,7 @@ function ensurePanel() {
   state.panel = panel;
   state.listEl = panel.querySelector(".cnv-panel__list");
   const header = panel.querySelector(".cnv-panel__header");
-  installPanelDrag(panel, header);
+  installPanelDrag(panel, header, () => toggleCollapse());
   applyPanelPos(panel);
 
   // Toolbar actions
@@ -488,9 +509,7 @@ function ensurePanel() {
   applyCollapsed();
   collapseBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    state.collapsed = !state.collapsed;
-    try { localStorage.setItem(COLLAPSE_KEY, state.collapsed ? "1" : "0"); } catch {}
-    applyCollapsed();
+    toggleCollapse();
   });
 
   return panel;
@@ -599,6 +618,12 @@ function persistShortcutsFromDom(settingsEl) {
 
 function escapeAttr(s) { return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;"); }
 function escapeHtml(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+function toggleCollapse() {
+  state.collapsed = !state.collapsed;
+  try { localStorage.setItem(COLLAPSE_KEY, state.collapsed ? "1" : "0"); } catch {}
+  applyCollapsed();
+}
 
 function applyCollapsed() {
   if (!state.panel) return;
