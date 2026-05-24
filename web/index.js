@@ -7,7 +7,7 @@ import { app } from "../../scripts/app.js";
 // Bump on every release. Exposed on window so it's trivial to check in the
 // console (`window.__cnv_version`) whether the browser is on the latest JS
 // or still serving a cached older copy.
-const CNV_VERSION = "0.2.1";
+const CNV_VERSION = "0.2.2";
 try {
   window.__cnv_version = CNV_VERSION;
   console.info(`[comfyui-navigator] loaded v${CNV_VERSION}`);
@@ -240,13 +240,24 @@ function setGroupEnabled(title, on) {
 }
 
 function setMuterWidget(widget, toggled) {
-  // Value is { toggled: bool }. Mutate in place AND call callback so rgthree
-  // re-renders + dispatches its own change handlers.
-  const next = { ...(widget.value || {}), toggled: !!toggled };
-  widget.value = next;
+  // rgthree's FastGroupsToggleRowWidget exposes a `toggle(value)` method that
+  // not only flips widget.value.toggled but ALSO calls doModeChange(), which
+  // is the actual work — changing node.mode of every node inside the group.
+  // Without doModeChange, rgthree's periodic observer re-checks node modes,
+  // sees no change, and reverts widget.toggled back to its old state (= the
+  // "comes back and says no" symptom).
   try {
+    if (typeof widget.toggle === "function") {
+      widget.toggle(!!toggled);
+      return;
+    }
+  } catch (e) { console.warn("[comfyui-navigator] widget.toggle() threw:", e); }
+  // Fallback for unknown widget shapes — set the value and hope.
+  try {
+    const next = { ...(widget.value || {}), toggled: !!toggled };
+    widget.value = next;
     if (typeof widget.callback === "function") widget.callback(next);
-  } catch (e) { console.warn("[comfyui-navigator] muter widget callback error:", e); }
+  } catch (e) { console.warn("[comfyui-navigator] fallback widget set threw:", e); }
 }
 
 /** Reset = turn every widget on, across every muter. */
