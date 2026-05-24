@@ -327,16 +327,15 @@ function openRowMenu(g, evt) {
     }},
     null,
     {
-      content: `Solo & Run this group  (${muterScope})`,
+      content: `Run only this group  (${muterScope})`,
       callback: async () => {
         soloGroup(g);
-        // Give the muter callbacks a tick to settle, then queue
         await new Promise((r) => setTimeout(r, 60));
         await queuePromptSafely();
       },
     },
     {
-      content: `Solo only (mute others, don't run)  (${muterScope})`,
+      content: `Mute other groups  (${muterScope})`,
       callback: () => soloGroup(g),
     },
     null,
