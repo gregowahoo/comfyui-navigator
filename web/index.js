@@ -1,0 +1,429 @@
+// comfyui-navigator: floating side panel listing every group in the current
+// workflow. Click → animated pan/zoom to that group. Right-click → solo /
+// reset (via rgthree FastGroupsMuter if installed, else per-node fallback).
+
+import { app } from "../../scripts/app.js";
+
+const STYLE_ID = "cnv-styles";
+const PANEL_ID = "cnv-panel";
+const POS_KEY = "comfyui-navigator.panel-pos";
+const COLLAPSE_KEY = "comfyui-navigator.collapsed";
+
+const state = {
+  panel: null,
+  searchInput: null,
+  listEl: null,
+  query: "",
+  collapsed: false,
+};
+
+// --- styles --------------------------------------------------------------
+
+function ensureStyles() {
+  if (document.getElementById(STYLE_ID)) return;
+  const link = document.createElement("link");
+  link.id = STYLE_ID;
+  link.rel = "stylesheet";
+  link.href = new URL("./styles.css", import.meta.url).toString();
+  document.head.appendChild(link);
+}
+
+// --- panel position persistence -----------------------------------------
+
+function loadPanelPos() {
+  try {
+    const v = localStorage.getItem(POS_KEY);
+    if (!v) return null;
+    const p = JSON.parse(v);
+    if (typeof p?.left === "number" && typeof p?.top === "number") return p;
+  } catch {}
+  return null;
+}
+
+function savePanelPos(left, top) {
+  try { localStorage.setItem(POS_KEY, JSON.stringify({ left, top })); } catch {}
+}
+
+function applyPanelPos(panel) {
+  const p = loadPanelPos();
+  if (!p) return;
+  panel.style.left = `${p.left}px`;
+  panel.style.top = `${p.top}px`;
+  panel.style.right = "auto";
+}
+
+// --- drag wiring (header is the handle) ---------------------------------
+
+function installPanelDrag(panel, handle) {
+  let dragging = false, dx = 0, dy = 0;
+  handle.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    // Don't initiate drag from buttons in the header
+    if (e.target.closest("button")) return;
+    e.preventDefault();
+    const r = panel.getBoundingClientRect();
+    dx = e.clientX - r.left;
+    dy = e.clientY - r.top;
+    dragging = true;
+    panel.classList.add("cnv-panel--dragging");
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    const left = Math.max(0, Math.min(window.innerWidth - 50, e.clientX - dx));
+    const top = Math.max(0, Math.min(window.innerHeight - 50, e.clientY - dy));
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
+    panel.style.right = "auto";
+  });
+  window.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false;
+    panel.classList.remove("cnv-panel--dragging");
+    const r = panel.getBoundingClientRect();
+    savePanelPos(r.left, r.top);
+  });
+}
+
+// --- group access -------------------------------------------------------
+
+function getGroups() {
+  return (app.graph?._groups || []).filter(Boolean);
+}
+
+function groupBounds(g) {
+  // LiteGraph stores bounding as [x, y, w, h]
+  const b = g._bounding || g.bounding;
+  if (b && b.length === 4) return { x: b[0], y: b[1], w: b[2], h: b[3] };
+  // Fallback to pos/size
+  return {
+    x: g.pos?.[0] ?? 0,
+    y: g.pos?.[1] ?? 0,
+    w: g.size?.[0] ?? 200,
+    h: g.size?.[1] ?? 100,
+  };
+}
+
+function groupColorOrDefault(g) {
+  return g.color || "#3b82f6";
+}
+
+function groupTitle(g, i) {
+  return (g.title || `Group ${i + 1}`).trim();
+}
+
+// --- pan + zoom to fit a bbox -------------------------------------------
+
+function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+
+function animatePanZoom(targetOffset, targetScale, durationMs = 280) {
+  const c = app.canvas;
+  if (!c?.ds) return;
+  const startOffset = [c.ds.offset[0], c.ds.offset[1]];
+  const startScale = c.ds.scale;
+  const start = performance.now();
+  function frame(now) {
+    const t = Math.min(1, (now - start) / durationMs);
+    const k = easeOutCubic(t);
+    c.ds.offset[0] = startOffset[0] + (targetOffset[0] - startOffset[0]) * k;
+    c.ds.offset[1] = startOffset[1] + (targetOffset[1] - startOffset[1]) * k;
+    c.ds.scale = startScale + (targetScale - startScale) * k;
+    c.setDirty?.(true, true);
+    if (t < 1) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+function fitToBounds(b, padding = 80) {
+  const c = app.canvas;
+  if (!c?.canvas) return;
+  const rect = c.canvas.getBoundingClientRect();
+  // Want: visible_area should contain b. visible_area = [-offset, viewport/scale]
+  // Compute scale to fit (with padding subtracted from viewport).
+  const vwUsable = Math.max(50, rect.width - padding * 2);
+  const vhUsable = Math.max(50, rect.height - padding * 2);
+  const scaleX = vwUsable / Math.max(1, b.w);
+  const scaleY = vhUsable / Math.max(1, b.h);
+  let targetScale = Math.min(scaleX, scaleY, 1.0); // never zoom past 100%
+  targetScale = Math.max(0.05, targetScale);
+  // Compute offset so the group's center lands at the canvas center.
+  const cx = b.x + b.w / 2;
+  const cy = b.y + b.h / 2;
+  const targetOffsetX = (rect.width / 2) / targetScale - cx;
+  const targetOffsetY = (rect.height / 2) / targetScale - cy;
+  animatePanZoom([targetOffsetX, targetOffsetY], targetScale);
+}
+
+function jumpToGroup(g) {
+  fitToBounds(groupBounds(g));
+}
+
+// --- rgthree FastGroupsMuter integration --------------------------------
+
+function findFastGroupsMuter() {
+  const nodes = app.graph?._nodes || [];
+  for (const n of nodes) {
+    if (n.type === "Fast Groups Muter (rgthree)") return n;
+  }
+  return null;
+}
+
+function muterWidgetsForGroups(muter) {
+  // rgthree's FastGroupsMuter exposes one toggle widget per group, named after the group title.
+  return (muter.widgets || []).filter((w) => w?.type === "RGTHREE_TOGGLE" || w?.type === "toggle");
+}
+
+function setMuterAll(muter, value) {
+  const widgets = muterWidgetsForGroups(muter);
+  for (const w of widgets) {
+    w.value = value;
+    if (typeof w.callback === "function") w.callback(value);
+  }
+  muter.setDirtyCanvas?.(true, true);
+}
+
+function soloGroupViaMuter(muter, groupTitle) {
+  const widgets = muterWidgetsForGroups(muter);
+  let solo = null;
+  for (const w of widgets) {
+    if (w.name === groupTitle || w.label === groupTitle) solo = w;
+    w.value = false;
+    if (typeof w.callback === "function") w.callback(false);
+  }
+  if (solo) {
+    solo.value = true;
+    if (typeof solo.callback === "function") solo.callback(true);
+  }
+  muter.setDirtyCanvas?.(true, true);
+  return !!solo;
+}
+
+// Fallback: directly set LiteGraph mode on every node, based on whether
+// the node's center is inside the soloed group's bounds.
+function soloGroupViaModeFlag(targetGroup) {
+  const b = groupBounds(targetGroup);
+  const NEVER = (window.LiteGraph?.NEVER ?? 2);
+  const ALWAYS = (window.LiteGraph?.ALWAYS ?? 0);
+  for (const n of (app.graph?._nodes || [])) {
+    const nx = (n.pos?.[0] || 0) + (n.size?.[0] || 0) / 2;
+    const ny = (n.pos?.[1] || 0) + (n.size?.[1] || 0) / 2;
+    const inside = nx >= b.x && nx <= b.x + b.w && ny >= b.y && ny <= b.y + b.h;
+    n.__cnv_pre_solo_mode = n.__cnv_pre_solo_mode ?? n.mode;
+    n.mode = inside ? ALWAYS : NEVER;
+  }
+  app.canvas?.setDirty?.(true, true);
+}
+
+function resetSoloModeFlags() {
+  for (const n of (app.graph?._nodes || [])) {
+    if (n.__cnv_pre_solo_mode !== undefined) {
+      n.mode = n.__cnv_pre_solo_mode;
+      delete n.__cnv_pre_solo_mode;
+    }
+  }
+  app.canvas?.setDirty?.(true, true);
+}
+
+function soloGroup(g) {
+  const muter = findFastGroupsMuter();
+  if (muter) {
+    const ok = soloGroupViaMuter(muter, groupTitle(g, 0));
+    if (!ok) console.warn("[comfyui-navigator] muter found but no widget matched group title:", groupTitle(g, 0));
+  } else {
+    soloGroupViaModeFlag(g);
+  }
+}
+
+function resetMuteAll() {
+  const muter = findFastGroupsMuter();
+  if (muter) setMuterAll(muter, true);
+  else resetSoloModeFlags();
+}
+
+// --- right-click chip menu ---------------------------------------------
+
+function openRowMenu(g, evt) {
+  const muter = findFastGroupsMuter();
+  const muterLabel = muter ? "(rgthree muter)" : "(per-node fallback)";
+  const opts = [
+    { content: "Jump here", callback: () => jumpToGroup(g) },
+    { content: "Center only (no zoom change)", callback: () => {
+      const b = groupBounds(g);
+      const c = app.canvas;
+      if (!c?.ds || !c.canvas) return;
+      const rect = c.canvas.getBoundingClientRect();
+      const cx = b.x + b.w / 2;
+      const cy = b.y + b.h / 2;
+      const targetOffsetX = (rect.width / 2) / c.ds.scale - cx;
+      const targetOffsetY = (rect.height / 2) / c.ds.scale - cy;
+      animatePanZoom([targetOffsetX, targetOffsetY], c.ds.scale);
+    }},
+    null,
+    { content: `Solo run this group ${muterLabel}`, callback: () => soloGroup(g) },
+    { content: "Reset (enable all groups)", callback: () => resetMuteAll() },
+  ];
+  new LiteGraph.ContextMenu(opts, { event: evt });
+}
+
+// --- panel render -------------------------------------------------------
+
+function ensurePanel() {
+  if (state.panel) return state.panel;
+  ensureStyles();
+  const panel = document.createElement("div");
+  panel.className = "cnv-panel";
+  panel.id = PANEL_ID;
+  panel.innerHTML = `
+    <div class="cnv-panel__header">
+      <span class="cnv-panel__header-grip">⋮⋮</span>
+      <span class="cnv-panel__header-title">Workflow Groups</span>
+      <span class="cnv-panel__header-count">0</span>
+      <button class="cnv-panel__header-collapse" type="button" title="Collapse / expand">▾</button>
+    </div>
+    <div class="cnv-panel__search-wrap">
+      <input class="cnv-panel__search" type="text" placeholder="Filter (typing 'qwen' filters)">
+    </div>
+    <div class="cnv-panel__list"></div>
+  `;
+  document.body.appendChild(panel);
+  state.panel = panel;
+  state.searchInput = panel.querySelector(".cnv-panel__search");
+  state.listEl = panel.querySelector(".cnv-panel__list");
+  const header = panel.querySelector(".cnv-panel__header");
+  installPanelDrag(panel, header);
+  applyPanelPos(panel);
+
+  state.searchInput.addEventListener("input", () => {
+    state.query = state.searchInput.value.trim().toLowerCase();
+    renderList();
+  });
+  // Stop chip clicks bubbling into canvas when typing in search
+  state.searchInput.addEventListener("keydown", (e) => e.stopPropagation());
+
+  const collapseBtn = panel.querySelector(".cnv-panel__header-collapse");
+  try { state.collapsed = localStorage.getItem(COLLAPSE_KEY) === "1"; } catch {}
+  applyCollapsed();
+  collapseBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    state.collapsed = !state.collapsed;
+    try { localStorage.setItem(COLLAPSE_KEY, state.collapsed ? "1" : "0"); } catch {}
+    applyCollapsed();
+  });
+
+  return panel;
+}
+
+function applyCollapsed() {
+  if (!state.panel) return;
+  state.panel.classList.toggle("cnv-panel--collapsed", state.collapsed);
+  const btn = state.panel.querySelector(".cnv-panel__header-collapse");
+  if (btn) btn.textContent = state.collapsed ? "▸" : "▾";
+}
+
+function renderList() {
+  const panel = ensurePanel();
+  const groups = getGroups();
+  const countEl = panel.querySelector(".cnv-panel__header-count");
+  countEl.textContent = String(groups.length);
+
+  // Hide panel entirely if fewer than 2 groups (nothing to navigate between)
+  if (groups.length < 2) {
+    panel.style.display = "none";
+    return;
+  }
+  panel.style.display = "";
+
+  const q = state.query;
+  const filtered = groups
+    .map((g, i) => ({ g, i, title: groupTitle(g, i) }))
+    .filter(({ title }) => !q || title.toLowerCase().includes(q));
+
+  state.listEl.replaceChildren();
+  for (const { g, i, title } of filtered) {
+    const row = document.createElement("div");
+    row.className = "cnv-row";
+    row.style.setProperty("--cnv-color", groupColorOrDefault(g));
+    row.innerHTML = `
+      <span class="cnv-row__dot"></span>
+      <span class="cnv-row__title"></span>
+      ${i < 9 ? `<span class="cnv-row__shortcut">${i + 1}</span>` : ""}
+    `;
+    row.querySelector(".cnv-row__title").textContent = title;
+    row.addEventListener("click", (e) => {
+      if (e.button !== 0) return;
+      jumpToGroup(g);
+    });
+    row.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openRowMenu(g, e);
+    });
+    state.listEl.appendChild(row);
+  }
+}
+
+// --- keyboard hotkeys ---------------------------------------------------
+
+function isTypingTarget(el) {
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || el.isContentEditable;
+}
+
+function onKeyDown(e) {
+  if (isTypingTarget(document.activeElement)) return;
+  // 1..9 → jump
+  if (e.key >= "1" && e.key <= "9" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    const idx = parseInt(e.key, 10) - 1;
+    const g = getGroups()[idx];
+    if (g) {
+      e.preventDefault();
+      jumpToGroup(g);
+    }
+  }
+}
+
+// --- lifecycle ----------------------------------------------------------
+
+let renderScheduled = false;
+function scheduleRender() {
+  if (renderScheduled) return;
+  renderScheduled = true;
+  setTimeout(() => { renderScheduled = false; renderList(); }, 50);
+}
+
+app.registerExtension({
+  name: "comfyui.navigator",
+  async setup() {
+    ensureStyles();
+    ensurePanel();
+    renderList();
+    window.addEventListener("keydown", onKeyDown, true);
+
+    // Re-render when groups added / removed / graph swapped
+    const origNodeAdded = app.graph.onNodeAdded;
+    app.graph.onNodeAdded = function (node) {
+      origNodeAdded?.call(this, node);
+      scheduleRender();
+    };
+    const origNodeRemoved = app.graph.onNodeRemoved;
+    app.graph.onNodeRemoved = function (node) {
+      origNodeRemoved?.call(this, node);
+      scheduleRender();
+    };
+
+    // Catch graph swaps (loading a different workflow). ComfyUI fires
+    // a custom "graphConfigured" or similar; polling _groups length as
+    // a cheap fallback.
+    let lastGroupCount = -1;
+    setInterval(() => {
+      const n = (app.graph?._groups?.length || 0);
+      if (n !== lastGroupCount) {
+        lastGroupCount = n;
+        scheduleRender();
+      }
+    }, 800);
+  },
+  async loadedGraphNode() {
+    scheduleRender();
+  },
+});
