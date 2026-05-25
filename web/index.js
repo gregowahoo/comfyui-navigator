@@ -7,7 +7,7 @@ import { app } from "../../scripts/app.js";
 // Bump on every release. Exposed on window so it's trivial to check in the
 // console (`window.__cnv_version`) whether the browser is on the latest JS
 // or still serving a cached older copy.
-const CNV_VERSION = "0.3.6";
+const CNV_VERSION = "0.3.7";
 try {
   window.__cnv_version = CNV_VERSION;
   console.info(`[comfyui-navigator] loaded v${CNV_VERSION}`);
@@ -344,21 +344,34 @@ function setGroupEnabled(title, on) {
 }
 
 function setMuterWidget(widget, toggled) {
-  // rgthree's FastGroupsToggleRowWidget exposes a `toggle(value)` method that
-  // not only flips widget.value.toggled but ALSO calls doModeChange(), which
-  // is the actual work — changing node.mode of every node inside the group.
-  // Without doModeChange, rgthree's periodic observer re-checks node modes,
-  // sees no change, and reverts widget.toggled back to its old state (= the
-  // "comes back and says no" symptom).
+  const target = !!toggled;
+  // The right call is doModeChange(force, skipOtherNodeCheck) — that's the
+  // only path that ACTUALLY forces a target state.
+  //
+  // The public widget.toggle(value) method looks like it should work, but it
+  // calls doModeChange() WITHOUT passing force, and doModeChange then
+  // recomputes the next state from current node modes:
+  //   newValue = !hasAnyActiveNodes
+  // So if any inner node is already ALWAYS (e.g. shared with a previously-
+  // enabled overlapping/parent group), toggle(true) actually DISABLES the
+  // group instead of enabling it. That surfaced as: Enable All flipped 13 of
+  // 14 groups but "Place an image" stayed off because its 25 inner nodes
+  // overlapped with an earlier-enabled neighbor.
   try {
-    if (typeof widget.toggle === "function") {
-      widget.toggle(!!toggled);
+    if (typeof widget.doModeChange === "function") {
+      widget.doModeChange(target, true);
+      // Mirror into the value object so any reader (our 600ms sync loop)
+      // picks it up immediately without waiting for rgthree's observer.
+      if (widget.value && typeof widget.value === "object") widget.value.toggled = target;
       return;
     }
-  } catch (e) { console.warn("[comfyui-navigator] widget.toggle() threw:", e); }
-  // Fallback for unknown widget shapes — set the value and hope.
+  } catch (e) { console.warn("[comfyui-navigator] widget.doModeChange threw:", e); }
+  // Fallback chain: public toggle, then raw value set.
   try {
-    const next = { ...(widget.value || {}), toggled: !!toggled };
+    if (typeof widget.toggle === "function") { widget.toggle(target); return; }
+  } catch (e) { console.warn("[comfyui-navigator] widget.toggle() threw:", e); }
+  try {
+    const next = { ...(widget.value || {}), toggled: target };
     widget.value = next;
     if (typeof widget.callback === "function") widget.callback(next);
   } catch (e) { console.warn("[comfyui-navigator] fallback widget set threw:", e); }
