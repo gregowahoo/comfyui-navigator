@@ -7,7 +7,7 @@ import { app } from "../../scripts/app.js";
 // Bump on every release. Exposed on window so it's trivial to check in the
 // console (`window.__cnv_version`) whether the browser is on the latest JS
 // or still serving a cached older copy.
-const CNV_VERSION = "0.3.3";
+const CNV_VERSION = "0.3.4";
 try {
   window.__cnv_version = CNV_VERSION;
   console.info(`[comfyui-navigator] loaded v${CNV_VERSION}`);
@@ -45,16 +45,27 @@ function applyColors(panel) {
 }
 
 /** Shortcuts are stored as { "key char": "Group Title" }.
- *  Defaults (when nothing is set): 1..9 → first 9 navigable groups by order. */
+ *  Defaults (when nothing is set OR map is empty): 1..9 → first 9 navigable
+ *  groups by order. An empty {} object would otherwise short-circuit the
+ *  defaults; treat it as "no overrides" so defaults kick back in. */
 function loadShortcuts() {
   try {
     const v = localStorage.getItem(SHORTCUTS_KEY);
-    if (v) return JSON.parse(v);
+    if (v) {
+      const parsed = JSON.parse(v);
+      if (parsed && typeof parsed === "object" && Object.keys(parsed).length > 0) return parsed;
+    }
   } catch {}
-  return null; // null = use defaults
+  return null;
 }
 function saveShortcuts(map) {
-  try { localStorage.setItem(SHORTCUTS_KEY, JSON.stringify(map)); } catch {}
+  try {
+    if (!map || Object.keys(map).length === 0) {
+      localStorage.removeItem(SHORTCUTS_KEY);
+    } else {
+      localStorage.setItem(SHORTCUTS_KEY, JSON.stringify(map));
+    }
+  } catch {}
 }
 function resolveShortcut(key) {
   const map = loadShortcuts();
@@ -736,16 +747,22 @@ function isTypingTarget(el) {
 function onKeyDown(e) {
   if (isTypingTarget(document.activeElement)) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
-  // Single-character keys only — modifier-free
   const k = (e.key || "").toLowerCase();
   if (k.length !== 1) return;
   const targetTitle = resolveShortcut(k);
   if (!targetTitle) return;
-  // Find the group whose title matches
   const groups = getNavigableGroups();
   for (let i = 0; i < groups.length; i++) {
     if (groupTitle(groups[i], i) === targetTitle) {
+      // CRITICAL: stop the event before rgthree's Bookmark node can grab it.
+      // rgthree subscribes to keydown via its own KEY_EVENT_SERVICE which
+      // listens on window/document. Calling stopImmediatePropagation on this
+      // capture-phase handler prevents the same event from reaching any
+      // other listeners attached to the same target, AND preventDefault
+      // tells the underlying ComfyUI / browser stack to leave this key alone.
       e.preventDefault();
+      e.stopImmediatePropagation();
+      e.stopPropagation();
       jumpToGroup(groups[i]);
       return;
     }
