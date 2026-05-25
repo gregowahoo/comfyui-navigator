@@ -7,7 +7,7 @@ import { app } from "../../scripts/app.js";
 // Bump on every release. Exposed on window so it's trivial to check in the
 // console (`window.__cnv_version`) whether the browser is on the latest JS
 // or still serving a cached older copy.
-const CNV_VERSION = "0.4.1";
+const CNV_VERSION = "0.4.2";
 try {
   window.__cnv_version = CNV_VERSION;
   console.info(`[comfyui-navigator] loaded v${CNV_VERSION}`);
@@ -575,7 +575,7 @@ function ensurePanel() {
   panel.innerHTML = `
     <div class="cnv-panel__header">
       <span class="cnv-panel__header-grip">⋮⋮</span>
-      <span class="cnv-panel__header-title">Workflow Groups</span>
+      <span class="cnv-panel__header-title">Workflow Group Navigator</span>
       <span class="cnv-panel__header-count">0</span>
       <button class="cnv-panel__header-collapse" type="button" title="Collapse / expand">▾</button>
     </div>
