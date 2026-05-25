@@ -133,6 +133,17 @@
 .cnv-row:hover { background: var(--cnv-row-hover); }
 .cnv-row:last-child { border-bottom: none; }
 
+/* Enabled row: bolder title + left accent stripe + slightly brighter bg */
+.cnv-row--enabled {
+  background: linear-gradient(to right, color-mix(in srgb, var(--cnv-accent) 14%, transparent), transparent 30%);
+  box-shadow: inset 2px 0 0 var(--cnv-accent);
+}
+.cnv-row--enabled .cnv-row__title {
+  font-weight: 600;
+  color: color-mix(in srgb, var(--cnv-accent) 35%, var(--cnv-text));
+}
+.cnv-row--enabled:hover { background: var(--cnv-row-hover); }
+
 .cnv-row__title {
   flex: 1;
   white-space: nowrap;

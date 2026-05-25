@@ -7,7 +7,7 @@ import { app } from "../../scripts/app.js";
 // Bump on every release. Exposed on window so it's trivial to check in the
 // console (`window.__cnv_version`) whether the browser is on the latest JS
 // or still serving a cached older copy.
-const CNV_VERSION = "0.3.2";
+const CNV_VERSION = "0.3.3";
 try {
   window.__cnv_version = CNV_VERSION;
   console.info(`[comfyui-navigator] loaded v${CNV_VERSION}`);
@@ -554,8 +554,13 @@ function buildSettings(el) {
     });
   }
 
-  // Shortcut row handlers (delegated)
+  // Shortcut row handlers (delegated). Use BOTH "input" and "change" so we
+  // save on every keystroke (input fires per char) AND on select changes.
+  // Earlier version only listened to "change" — text inputs only fire change
+  // on blur, so typing a key then immediately picking a group from the select
+  // could lose the unsaved key value when the panel closed.
   const list = el.querySelector("[data-shortcut-list]");
+  list.addEventListener("input", onShortcutChange);
   list.addEventListener("change", onShortcutChange);
   list.addEventListener("click", (e) => {
     if (e.target.matches("[data-remove]")) {
@@ -660,6 +665,7 @@ function renderList() {
 
     const enabled = isGroupEnabled(title);
     const hasMuter = enabled !== null;
+    if (enabled === true) row.classList.add("cnv-row--enabled");
 
     const toggleHtml = hasMuter
       ? `<span class="cnv-toggle ${enabled ? "cnv-toggle--on" : ""}" data-toggle title="Click to toggle"><span class="cnv-toggle__label">${enabled ? "yes" : "no"}</span><span class="cnv-toggle__knob"></span></span>`
@@ -681,6 +687,7 @@ function renderList() {
         setGroupEnabled(title, newState);
         toggle.classList.toggle("cnv-toggle--on", newState);
         toggle.querySelector(".cnv-toggle__label").textContent = newState ? "yes" : "no";
+        row.classList.toggle("cnv-row--enabled", newState);
       });
     }
 
@@ -713,6 +720,8 @@ function syncCheckboxStates() {
       toggle.classList.toggle("cnv-toggle--on", enabled);
       if (labelEl) labelEl.textContent = enabled ? "yes" : "no";
     }
+    // Keep the row's enabled-highlight class in sync with the toggle state
+    row.classList.toggle("cnv-row--enabled", !!enabled);
   }
 }
 
