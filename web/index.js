@@ -7,7 +7,7 @@ import { app } from "../../scripts/app.js";
 // Bump on every release. Exposed on window so it's trivial to check in the
 // console (`window.__cnv_version`) whether the browser is on the latest JS
 // or still serving a cached older copy.
-const CNV_VERSION = "0.4.2";
+const CNV_VERSION = "0.4.3";
 try {
   window.__cnv_version = CNV_VERSION;
   console.info(`[comfyui-navigator] loaded v${CNV_VERSION}`);
@@ -70,12 +70,11 @@ function saveShortcuts(map) {
 }
 function resolveShortcut(key) {
   // Custom mapping wins ONLY if there's an explicit entry for this key.
-  // (Previous logic: any non-empty saved map disabled all defaults — so
-  //  adding one custom shortcut accidentally killed every other key.)
   const map = loadShortcuts();
   if (map && map[key]) return map[key];
-  // Default fallback: 1..9 → first 9 groups by panel order
-  if (key >= "1" && key <= "9") {
+  // Default fallback: any positive integer maps to that 1-indexed row.
+  // (Previously 1..9 only; now supports "10", "11", ... via the keyBuffer.)
+  if (/^[1-9][0-9]*$/.test(key)) {
     const idx = parseInt(key, 10) - 1;
     const g = getNavigableGroups()[idx];
     return g ? groupTitle(g, idx) : null;
@@ -92,14 +91,10 @@ function getShortcutKeyForGroup(title, index) {
       if (t === title) return k;
     }
   }
-  // Default badge: 1..9 by position — but only if no custom mapping has
-  // grabbed that key for a different group.
-  if (index < 9) {
-    const defaultKey = String(index + 1);
-    if (map && map[defaultKey] && map[defaultKey] !== title) return null;
-    return defaultKey;
-  }
-  return null;
+  // Default badge: this row's 1-indexed position. Works for any row count.
+  const defaultKey = String(index + 1);
+  if (map && map[defaultKey] && map[defaultKey] !== title) return null;
+  return defaultKey;
 }
 
 const state = {
@@ -897,29 +892,103 @@ function isTypingTarget(el) {
   return tag === "INPUT" || tag === "TEXTAREA" || el.isContentEditable;
 }
 
+// Multi-digit shortcut buffer. With N groups we need keys "1".."N" to work,
+// which means single digits like "1" might be a prefix of "10".."19" etc.
+// Strategy: accumulate digits into a buffer; commit on (a) timeout, (b) a
+// non-digit keypress, or (c) when no longer prefix could possibly extend
+// into a valid row number.
+let keyBuffer = "";
+let bufferTimer = null;
+const BUFFER_TIMEOUT = 350;
+
+// Cancel any STOP, the *event* has already been consumed by the capture-phase
+// handler — this just kills the pending flush timer (used when we commit early
+// or when the buffer is reset).
+function clearBufferTimer() {
+  if (bufferTimer) { clearTimeout(bufferTimer); bufferTimer = null; }
+}
+
+function resetBuffer() {
+  clearBufferTimer();
+  keyBuffer = "";
+}
+
+function tryJump(key) {
+  const targetTitle = resolveShortcut(key);
+  if (!targetTitle) return false;
+  const groups = getNavigableGroups();
+  for (let i = 0; i < groups.length; i++) {
+    if (groupTitle(groups[i], i) === targetTitle) {
+      jumpToGroup(groups[i]);
+      return true;
+    }
+  }
+  return false;
+}
+
+function flushBuffer() {
+  const k = keyBuffer;
+  resetBuffer();
+  if (k) tryJump(k);
+}
+
 function onKeyDown(e) {
   if (isTypingTarget(document.activeElement)) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   const k = (e.key || "").toLowerCase();
   if (k.length !== 1) return;
-  const targetTitle = resolveShortcut(k);
-  if (!targetTitle) return;
-  const groups = getNavigableGroups();
-  for (let i = 0; i < groups.length; i++) {
-    if (groupTitle(groups[i], i) === targetTitle) {
-      // CRITICAL: stop the event before rgthree's Bookmark node can grab it.
-      // rgthree subscribes to keydown via its own KEY_EVENT_SERVICE which
-      // listens on window/document. Calling stopImmediatePropagation on this
-      // capture-phase handler prevents the same event from reaching any
-      // other listeners attached to the same target, AND preventDefault
-      // tells the underlying ComfyUI / browser stack to leave this key alone.
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      e.stopPropagation();
-      jumpToGroup(groups[i]);
+
+  // CRITICAL: stop the event before rgthree's Bookmark node can grab it.
+  // rgthree subscribes to keydown via its own KEY_EVENT_SERVICE which
+  // listens on window/document. Calling stopImmediatePropagation on this
+  // capture-phase handler prevents the same event from reaching any
+  // other listeners attached to the same target, AND preventDefault
+  // tells the underlying ComfyUI / browser stack to leave this key alone.
+  // We only swallow the event when we're *going* to handle it (i.e. a
+  // mapping exists, or we're buffering a partial multi-digit shortcut).
+  const swallow = () => {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    e.stopPropagation();
+  };
+
+  // --- digit: append to buffer and decide whether to commit now or wait
+  if (/^[0-9]$/.test(k)) {
+    const newBuf = keyBuffer + k;
+    const totalRows = getNavigableGroups().length;
+    const asNum = parseInt(newBuf, 10);
+    const hasMappingNow = resolveShortcut(newBuf) != null;
+    // A *longer* buffer could still resolve iff (asNum * 10) is a valid row
+    // index, i.e. there's room to grow the number by one more digit.
+    // We cap buffer length at 3 (rows 1..999) as a sanity ceiling.
+    const canExtend =
+      asNum > 0 && (asNum * 10) <= totalRows && newBuf.length < 3;
+
+    if (!hasMappingNow && !canExtend) {
+      // Dead end. Flush whatever WAS buffered, then ignore this key entirely
+      // so it bubbles to other handlers (rgthree bookmark, etc.).
+      flushBuffer();
       return;
     }
+
+    keyBuffer = newBuf;
+    clearBufferTimer();
+    swallow();
+
+    if (!canExtend) {
+      // No longer prefix is possible — commit immediately, no need to wait.
+      flushBuffer();
+      return;
+    }
+
+    // Wait briefly for more digits; on timeout, commit current buffer.
+    bufferTimer = setTimeout(flushBuffer, BUFFER_TIMEOUT);
+    return;
   }
+
+  // --- non-digit: any buffered digits are now stale → flush, then handle key
+  flushBuffer();
+  if (tryJump(k)) swallow();
 }
 
 // --- lifecycle ----------------------------------------------------------
