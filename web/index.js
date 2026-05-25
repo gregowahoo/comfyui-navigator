@@ -7,7 +7,7 @@ import { app } from "../../scripts/app.js";
 // Bump on every release. Exposed on window so it's trivial to check in the
 // console (`window.__cnv_version`) whether the browser is on the latest JS
 // or still serving a cached older copy.
-const CNV_VERSION = "0.3.7";
+const CNV_VERSION = "0.4.0";
 try {
   window.__cnv_version = CNV_VERSION;
   console.info(`[comfyui-navigator] loaded v${CNV_VERSION}`);
@@ -19,6 +19,7 @@ const POS_KEY = "comfyui-navigator.panel-pos";
 const COLLAPSE_KEY = "comfyui-navigator.collapsed";
 const COLORS_KEY = "comfyui-navigator.colors";
 const SHORTCUTS_KEY = "comfyui-navigator.shortcuts";
+const ORDER_KEY = "comfyui-navigator.group-order";
 
 const COLOR_FIELDS = [
   { key: "--cnv-bg",        label: "Body background",   default: "#0e283f" },
@@ -207,13 +208,76 @@ function getGroups() {
  *  Fast Groups Muter, we mirror the *primary* one (= the muter with the most
  *  managed widgets). That respects the user's matchColors partition: a sub-
  *  group with a different color belongs to a smaller muter and gets filtered
- *  out of the nav list. If no muter exists, fall back to every group. */
+ *  out of the nav list. If no muter exists, fall back to every group.
+ *  Finally, apply the user's custom drag-reorder (if set). */
 function getNavigableGroups() {
   const all = getGroups();
   const muters = getMutersAndWidgets();
-  if (muters.length === 0) return all;
-  const primary = muters.reduce((a, b) => (a.widgets.size >= b.widgets.size ? a : b));
-  return all.filter((g, i) => primary.widgets.has(groupTitle(g, i)));
+  let filtered;
+  if (muters.length === 0) {
+    filtered = all;
+  } else {
+    const primary = muters.reduce((a, b) => (a.widgets.size >= b.widgets.size ? a : b));
+    filtered = all.filter((g, i) => primary.widgets.has(groupTitle(g, i)));
+  }
+  return sortByCustomOrder(filtered);
+}
+
+function loadGroupOrder() {
+  try {
+    const v = localStorage.getItem(ORDER_KEY);
+    if (v) {
+      const arr = JSON.parse(v);
+      if (Array.isArray(arr)) return arr;
+    }
+  } catch {}
+  return null;
+}
+function saveGroupOrder(titles) {
+  try {
+    if (!titles || !titles.length) localStorage.removeItem(ORDER_KEY);
+    else localStorage.setItem(ORDER_KEY, JSON.stringify(titles));
+  } catch {}
+}
+
+/** Sort `groups` by the custom-order array. Unlisted groups keep their
+ *  relative order and end up after listed ones. */
+function sortByCustomOrder(groups) {
+  const order = loadGroupOrder();
+  if (!order) return groups;
+  const idx = new Map();
+  order.forEach((t, i) => idx.set(t, i));
+  return [...groups]
+    .map((g, i) => ({ g, origIdx: i, title: groupTitle(g, i) }))
+    .sort((a, b) => {
+      const ai = idx.has(a.title) ? idx.get(a.title) : Number.POSITIVE_INFINITY;
+      const bi = idx.has(b.title) ? idx.get(b.title) : Number.POSITIVE_INFINITY;
+      if (ai !== bi) return ai - bi;
+      return a.origIdx - b.origIdx;
+    })
+    .map((x) => x.g);
+}
+
+/** Move `movingTitle` to be right before/after `targetTitle` in the
+ *  persisted custom order. */
+function reorderGroup(movingTitle, targetTitle, placement) {
+  // Build current order, seeding with the current navigable titles so that
+  // any group not yet in the saved order gets a stable slot.
+  const navTitles = getNavigableGroups().map((g, i) => groupTitle(g, i));
+  let order = loadGroupOrder();
+  if (!order) order = [...navTitles];
+  // Drop anything no longer present so the stored order stays clean
+  order = order.filter((t) => navTitles.includes(t));
+  // Append any new titles missing from order
+  for (const t of navTitles) if (!order.includes(t)) order.push(t);
+
+  // Now actually move
+  order = order.filter((t) => t !== movingTitle);
+  const targetIdx = order.indexOf(targetTitle);
+  if (targetIdx < 0) order.push(movingTitle);
+  else order.splice(placement === "after" ? targetIdx + 1 : targetIdx, 0, movingTitle);
+  saveGroupOrder(order);
+  scheduleRender();
 }
 
 function groupBounds(g) {
@@ -588,7 +652,10 @@ function buildSettings(el) {
       <div data-shortcut-list>${shortcutRows}</div>
       <button class="cnv-settings__add-btn" type="button" data-add-shortcut>+ Add shortcut</button>
     </div>
-    <button class="cnv-settings__reset" type="button" data-reset>Reset all settings</button>
+    <div style="display:flex; gap:6px; justify-content:flex-end;">
+      <button class="cnv-settings__reset" type="button" data-reset-order>Reset row order</button>
+      <button class="cnv-settings__reset" type="button" data-reset>Reset all settings</button>
+    </div>
   `;
 
   // Color picker handlers
@@ -624,13 +691,22 @@ function buildSettings(el) {
     persistShortcutsFromDom(el);
   });
 
-  // Reset
+  // Reset row order only
+  el.querySelector("[data-reset-order]").addEventListener("click", () => {
+    if (!confirm("Reset row order to the default (rgthree's order)?")) return;
+    saveGroupOrder(null);
+    scheduleRender();
+  });
+
+  // Reset everything
   el.querySelector("[data-reset]").addEventListener("click", () => {
-    if (!confirm("Reset all colors and shortcuts to defaults?")) return;
+    if (!confirm("Reset colors, shortcuts, and row order to defaults?")) return;
     try { localStorage.removeItem(COLORS_KEY); } catch {}
     try { localStorage.removeItem(SHORTCUTS_KEY); } catch {}
+    try { localStorage.removeItem(ORDER_KEY); } catch {}
     applyColors(state.panel);
     buildSettings(el);
+    scheduleRender();
   });
 }
 
@@ -710,10 +786,44 @@ function renderList() {
     const row = document.createElement("div");
     row.className = "cnv-row";
     row.dataset.title = title;
+    row.draggable = true;
 
     const enabled = isGroupEnabled(title);
     const hasMuter = enabled !== null;
     if (enabled === true) row.classList.add("cnv-row--enabled");
+
+    row.addEventListener("dragstart", (e) => {
+      state.dragTitle = title;
+      e.dataTransfer.effectAllowed = "move";
+      try { e.dataTransfer.setData("text/plain", title); } catch {}
+      row.classList.add("cnv-row--dragging");
+    });
+    row.addEventListener("dragend", () => {
+      state.dragTitle = null;
+      row.classList.remove("cnv-row--dragging");
+      state.listEl.querySelectorAll(".cnv-row--drop-above, .cnv-row--drop-below")
+        .forEach((r) => r.classList.remove("cnv-row--drop-above", "cnv-row--drop-below"));
+    });
+    row.addEventListener("dragover", (e) => {
+      if (!state.dragTitle || state.dragTitle === title) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      const rect = row.getBoundingClientRect();
+      const below = (e.clientY - rect.top) > rect.height / 2;
+      row.classList.toggle("cnv-row--drop-above", !below);
+      row.classList.toggle("cnv-row--drop-below", below);
+    });
+    row.addEventListener("dragleave", () => {
+      row.classList.remove("cnv-row--drop-above", "cnv-row--drop-below");
+    });
+    row.addEventListener("drop", (e) => {
+      const moving = state.dragTitle;
+      if (!moving || moving === title) return;
+      e.preventDefault();
+      const rect = row.getBoundingClientRect();
+      const below = (e.clientY - rect.top) > rect.height / 2;
+      reorderGroup(moving, title, below ? "after" : "before");
+    });
 
     const toggleHtml = hasMuter
       ? `<span class="cnv-toggle ${enabled ? "cnv-toggle--on" : ""}" data-toggle title="Click to toggle"><span class="cnv-toggle__label">${enabled ? "yes" : "no"}</span><span class="cnv-toggle__knob"></span></span>`

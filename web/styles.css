@@ -144,6 +144,24 @@
 }
 .cnv-row--enabled:hover { background: var(--cnv-row-hover); }
 
+/* Drag and drop visual feedback */
+.cnv-row[draggable="true"] { cursor: grab; }
+.cnv-row[draggable="true"]:active { cursor: grabbing; }
+.cnv-row--dragging { opacity: 0.4; }
+.cnv-row--drop-above {
+  box-shadow: inset 0 3px 0 var(--cnv-accent);
+}
+.cnv-row--drop-below {
+  box-shadow: inset 0 -3px 0 var(--cnv-accent);
+}
+/* When a row is BOTH enabled AND a drop target, keep both visuals */
+.cnv-row--enabled.cnv-row--drop-above {
+  box-shadow: inset 2px 0 0 var(--cnv-accent), inset 0 3px 0 var(--cnv-accent);
+}
+.cnv-row--enabled.cnv-row--drop-below {
+  box-shadow: inset 2px 0 0 var(--cnv-accent), inset 0 -3px 0 var(--cnv-accent);
+}
+
 .cnv-row__title {
   flex: 1;
   white-space: nowrap;
