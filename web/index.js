@@ -7,7 +7,7 @@ import { app } from "../../scripts/app.js";
 // Bump on every release. Exposed on window so it's trivial to check in the
 // console (`window.__cnv_version`) whether the browser is on the latest JS
 // or still serving a cached older copy.
-const CNV_VERSION = "0.3.5";
+const CNV_VERSION = "0.3.6";
 try {
   window.__cnv_version = CNV_VERSION;
   console.info(`[comfyui-navigator] loaded v${CNV_VERSION}`);
@@ -78,6 +78,25 @@ function resolveShortcut(key) {
     const idx = parseInt(key, 10) - 1;
     const g = getNavigableGroups()[idx];
     return g ? groupTitle(g, idx) : null;
+  }
+  return null;
+}
+
+/** Inverse of resolveShortcut: which key (if any) jumps to this group?
+ *  Used to render the badge on each row in the panel. */
+function getShortcutKeyForGroup(title, index) {
+  const map = loadShortcuts();
+  if (map) {
+    for (const [k, t] of Object.entries(map)) {
+      if (t === title) return k;
+    }
+  }
+  // Default badge: 1..9 by position — but only if no custom mapping has
+  // grabbed that key for a different group.
+  if (index < 9) {
+    const defaultKey = String(index + 1);
+    if (map && map[defaultKey] && map[defaultKey] !== title) return null;
+    return defaultKey;
   }
   return null;
 }
@@ -633,6 +652,8 @@ function persistShortcutsFromDom(settingsEl) {
     if (k && g) map[k] = g;
   }
   saveShortcuts(map);
+  // Re-render the group list so badges reflect the new mapping
+  scheduleRender();
 }
 
 function escapeAttr(s) { return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;"); }
@@ -685,9 +706,10 @@ function renderList() {
       ? `<span class="cnv-toggle ${enabled ? "cnv-toggle--on" : ""}" data-toggle title="Click to toggle"><span class="cnv-toggle__label">${enabled ? "yes" : "no"}</span><span class="cnv-toggle__knob"></span></span>`
       : `<span class="cnv-toggle cnv-toggle--placeholder" title="No muter manages this group"><span class="cnv-toggle__label">—</span><span class="cnv-toggle__knob"></span></span>`;
 
+    const shortcutKey = getShortcutKeyForGroup(title, i);
     row.innerHTML = `
       <span class="cnv-row__title"></span>
-      ${i < 9 ? `<span class="cnv-row__shortcut">${i + 1}</span>` : ""}
+      ${shortcutKey ? `<span class="cnv-row__shortcut" title="Press ${escapeAttr(shortcutKey)} to jump here">${escapeHtml(shortcutKey)}</span>` : ""}
       ${toggleHtml}
     `;
     row.querySelector(".cnv-row__title").textContent = title;
