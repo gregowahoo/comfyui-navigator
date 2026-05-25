@@ -21,8 +21,9 @@ own pain. This panel keeps that whole control surface always visible.
 - **Enable All / Disable All / Run** buttons in the toolbar.
 - **Drag rows to reorder them** — define a "step 1 → step 2 → ..." flow.
   Order persists across reloads.
-- **Keyboard shortcuts** — 1–9 jump to the first nine rows by default.
-  Configurable to any key in the settings panel.
+- **Keyboard shortcuts** — number keys jump to that row (1, 2, ... and
+  multi-digit like 10, 11, ... for longer lists). Configurable to any key
+  in the settings panel.
 - **Custom colors** — four theme variables exposed via color pickers.
 - **Respects `matchColors`** — if you scope a Fast Groups Muter to specific
   group colors (e.g. for sub-groups), the panel mirrors only the primary
@@ -65,13 +66,19 @@ a workflow with two or more groups.
 ## Keyboard shortcuts
 
 Defaults:
-- `1`–`9`: jump to the 1st through 9th visible row
+- `1`, `2`, `3`, ... jump to that row by position.
+- **Multi-digit** numbers work too: type `1` `5` within ~350ms to jump
+  to row 15. Single digits stay snappy — if no two-digit row could
+  possibly start with that digit (e.g. `2` when you only have 15 rows),
+  the jump fires immediately with no wait.
+- Drag-reorder a row and its number reassigns automatically (the row
+  in slot 1 always gets `1`, slot 2 gets `2`, etc.).
 
-Override any of those in **⚙ Settings → Keyboard shortcuts**. Custom mappings
+Override any default in **⚙ Settings → Keyboard shortcuts**. Custom mappings
 override only the specific keys you bind; the remaining defaults stay active.
 
 `Ctrl` / `Alt` / `Meta` modifiers are ignored — those are reserved for
-browser/ComfyUI hotkeys. Single-char keys only.
+browser/ComfyUI hotkeys. Single-char keys only (custom mappings).
 
 ## Settings (⚙)
 
