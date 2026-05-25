@@ -7,7 +7,7 @@ import { app } from "../../scripts/app.js";
 // Bump on every release. Exposed on window so it's trivial to check in the
 // console (`window.__cnv_version`) whether the browser is on the latest JS
 // or still serving a cached older copy.
-const CNV_VERSION = "0.3.4";
+const CNV_VERSION = "0.3.5";
 try {
   window.__cnv_version = CNV_VERSION;
   console.info(`[comfyui-navigator] loaded v${CNV_VERSION}`);
@@ -68,9 +68,12 @@ function saveShortcuts(map) {
   } catch {}
 }
 function resolveShortcut(key) {
+  // Custom mapping wins ONLY if there's an explicit entry for this key.
+  // (Previous logic: any non-empty saved map disabled all defaults — so
+  //  adding one custom shortcut accidentally killed every other key.)
   const map = loadShortcuts();
-  if (map) return map[key] || null;
-  // Default: 1..9 → first 9 groups
+  if (map && map[key]) return map[key];
+  // Default fallback: 1..9 → first 9 groups by panel order
   if (key >= "1" && key <= "9") {
     const idx = parseInt(key, 10) - 1;
     const g = getNavigableGroups()[idx];
