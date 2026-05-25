@@ -99,6 +99,15 @@
 .cnv-tb-btn:hover { background: var(--cnv-accent); }
 .cnv-tb-btn:active { filter: brightness(0.8); }
 
+/* Run button — distinct accent so it doesn't look like another Enable/Disable */
+.cnv-tb-btn--run {
+  background: #2d7d46;
+  border-color: #1f5630;
+  font-weight: 600;
+}
+.cnv-tb-btn--run:hover { background: #36a154; }
+.cnv-tb-btn--run:active { background: #1f5630; }
+
 .cnv-tb-btn--icon {
   padding: 4px 6px;
   background: transparent;

@@ -7,7 +7,7 @@ import { app } from "../../scripts/app.js";
 // Bump on every release. Exposed on window so it's trivial to check in the
 // console (`window.__cnv_version`) whether the browser is on the latest JS
 // or still serving a cached older copy.
-const CNV_VERSION = "0.4.0";
+const CNV_VERSION = "0.4.1";
 try {
   window.__cnv_version = CNV_VERSION;
   console.info(`[comfyui-navigator] loaded v${CNV_VERSION}`);
@@ -582,8 +582,9 @@ function ensurePanel() {
     <div class="cnv-panel__toolbar">
       <button class="cnv-tb-btn" type="button" data-action="enable-all" title="Turn every group ON">Enable All</button>
       <button class="cnv-tb-btn" type="button" data-action="disable-all" title="Turn every group OFF">Disable All</button>
+      <button class="cnv-tb-btn cnv-tb-btn--run" type="button" data-action="run" title="Queue the workflow (only enabled groups execute)">▶ Run</button>
       <span class="cnv-tb-spacer"></span>
-      <button class="cnv-tb-btn cnv-tb-btn--icon" type="button" data-action="settings" title="Settings: colors, shortcuts">⚙</button>
+      <button class="cnv-tb-btn cnv-tb-btn--icon" type="button" data-action="settings" title="Settings: colors, shortcuts, row order">⚙</button>
     </div>
     <div class="cnv-settings" data-settings></div>
     <div class="cnv-panel__list"></div>
@@ -603,6 +604,10 @@ function ensurePanel() {
   panel.querySelector('[data-action="disable-all"]').addEventListener("click", (e) => {
     e.stopPropagation();
     setAllMutersTo(false);
+  });
+  panel.querySelector('[data-action="run"]').addEventListener("click", async (e) => {
+    e.stopPropagation();
+    await queuePromptSafely();
   });
   const settingsEl = panel.querySelector("[data-settings]");
   panel.querySelector('[data-action="settings"]').addEventListener("click", (e) => {
