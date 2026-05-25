@@ -1,41 +1,100 @@
 # comfyui-navigator
 
-Floating side panel that lists every **group** in your current workflow and
-lets you jump between them instantly. For graphs that span 30000+ pixels with
-15+ workflows-within-a-workflow, this turns "scroll forever to find the
-upscale section" into "click the row, you're there."
+> A floating panel that lists every group in your ComfyUI workflow, lets you
+> jump between them, toggle them on/off, and run only the ones you want — all
+> at one click, regardless of canvas zoom.
+
+For graphs that span 30,000+ pixels with 15+ logical sub-workflows packed
+into them, scrolling to your Fast Groups Muter just to flip a toggle is its
+own pain. This panel keeps that whole control surface always visible.
+
+<!-- replace this line with a screenshot/gif of the panel in action -->
 
 ## What it does
 
-- Auto-detects every group on the open workflow (no setup, no node to drop)
-- Click a row → animated pan + zoom to fit that group on screen
-- Search box at the top — type "qwen" to narrow to Qwen groups
-- **Right-click a row → Solo run** (mutes every other group via rgthree's
-  Fast Groups Muter if installed, falls back to per-node mode flag if not)
-- **Right-click → Reset** to re-enable everything
-- **Keyboard 1–9** jumps to the first nine groups
-- Drag the header to move the panel anywhere; collapse with ▾
-- Position + collapsed state persisted across reloads (localStorage)
+- **Auto-detects every group** in the current workflow. No setup, no nodes
+  to drop.
+- **Click a row → pan + zoom** to that group.
+- **Click the toggle pill → enable/disable** the group (drives your existing
+  [rgthree-comfy](https://github.com/rgthree/rgthree-comfy) Fast Groups Muter
+  behind the scenes).
+- **Enable All / Disable All / Run** buttons in the toolbar.
+- **Drag rows to reorder them** — define a "step 1 → step 2 → ..." flow.
+  Order persists across reloads.
+- **Keyboard shortcuts** — 1–9 jump to the first nine rows by default.
+  Configurable to any key in the settings panel.
+- **Custom colors** — four theme variables exposed via color pickers.
+- **Respects `matchColors`** — if you scope a Fast Groups Muter to specific
+  group colors (e.g. for sub-groups), the panel mirrors only the primary
+  muter's groups and hides the sub-group rows.
 
-Hides itself automatically if the workflow has fewer than 2 groups (nothing
-to navigate between).
+## Requirements
+
+- ComfyUI (any recent version)
+- [rgthree-comfy](https://github.com/rgthree/rgthree-comfy) installed and at
+  least one `Fast Groups Muter` node on the graph
+
+Without a muter, the panel still shows your groups and the jump/reorder
+features work — but toggles render as a dashed placeholder (no muter to
+drive). Drop a muter to unlock the full UX.
 
 ## Install
 
+```bash
+cd ComfyUI/custom_nodes
+git clone https://github.com/gregowahoo/comfyui-navigator.git
 ```
-cd <ComfyUI>/custom_nodes
-git clone <repo-url> comfyui-navigator
-```
 
-Restart ComfyUI. The panel appears in the top-right of the canvas whenever
-you open a workflow with multiple groups.
+Restart ComfyUI. The panel appears top-right of the canvas whenever you open
+a workflow with two or more groups.
 
-## Recommended pairing
+## Usage
 
-- **Fast Groups Muter (rgthree)** — drop one on the graph and Solo / Reset
-  drive it directly. Without it, Solo falls back to flipping
-  `node.mode = LiteGraph.NEVER` per-node (cruder, no chip indicators).
+1. Have at least one `Fast Groups Muter (rgthree)` on your graph.
+2. The panel renders one row per managed group:
+   - **Click toggle pill** → flip the group on/off (drives the muter)
+   - **Click row body** → pan + zoom to that group
+   - **Drag a row** → reorder (drop indicator shows where it'll land)
+3. Toolbar:
+   - **Enable All / Disable All** — flip every group
+   - **▶ Run** — queue the prompt (only enabled groups execute)
+   - **⚙ Settings** — colors, keyboard shortcuts, row order reset
+4. Drag the **panel header** to move the panel anywhere; double-click
+   the header (or the **▾** button) to collapse.
+
+## Keyboard shortcuts
+
+Defaults:
+- `1`–`9`: jump to the 1st through 9th visible row
+
+Override any of those in **⚙ Settings → Keyboard shortcuts**. Custom mappings
+override only the specific keys you bind; the remaining defaults stay active.
+
+`Ctrl` / `Alt` / `Meta` modifiers are ignored — those are reserved for
+browser/ComfyUI hotkeys. Single-char keys only.
+
+## Settings (⚙)
+
+- **Colors** — four pickers: body, header bar, accent (toggle "on" glow + button
+  hover), row hover. Live preview, persists to localStorage.
+- **Keyboard shortcuts** — add `key → group` rows. Empty list = defaults.
+- **Reset row order** — clear the drag-defined order (back to rgthree's sort).
+- **Reset all settings** — wipes colors, shortcuts, and order.
+
+## Known limitations
+
+- The panel reads `LGraphCanvas.ds.scale` / `.offset` to compute pan/zoom
+  targets. If ComfyUI's internal canvas API changes name, panning may break.
+- Pinning to viewport works only while panel is visible — collapsed = no nav.
+- Drag-to-reorder uses HTML5 DnD; on some touchscreens / styluses the drop
+  zones may need a longer hold to trigger. Mouse works as expected.
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
+
+## Acknowledgements
+
+Built on top of [rgthree-comfy](https://github.com/rgthree/rgthree-comfy)'s
+Fast Groups Muter. This panel just gives that node a floating, searchable,
+keyboard-driven, drag-reorderable face.
