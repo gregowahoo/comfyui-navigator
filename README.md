@@ -9,6 +9,7 @@ into them, scrolling to your Fast Groups Muter just to flip a toggle is its
 own pain. This panel keeps that whole control surface always visible.
 
 <img width="1277" height="629" alt="Image" src="https://github.com/user-attachments/assets/ef642144-3df2-4255-8c99-a460db7ec64a" />
+<img width="1274" height="604" alt="Image" src="https://github.com/user-attachments/assets/552149c2-55c4-46af-8796-564af87e34fc" />
 
 ## What it does
 
