@@ -8,7 +8,7 @@ For graphs that span 30,000+ pixels with 15+ logical sub-workflows packed
 into them, scrolling to your Fast Groups Muter just to flip a toggle is its
 own pain. This panel keeps that whole control surface always visible.
 
-<!-- replace this line with a screenshot/gif of the panel in action -->
+<img width="1261" height="692" alt="Image" src="https://github.com/user-attachments/assets/7318d646-d823-41c7-b83b-e901ed3e94b9" />
 
 ## What it does
 
