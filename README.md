@@ -56,6 +56,9 @@ a workflow with two or more groups.
 2. The panel renders one row per managed group:
    - **Click toggle pill** → flip the group on/off (drives the muter)
    - **Click row body** → pan + zoom to that group
+
+     <img width="3804" height="1871" alt="Selecting a group and navigating to it" src="https://github.com/user-attachments/assets/e47effb7-0a26-4e0e-b118-1068d32189bf" />
+
    - **Drag a row** → reorder (drop indicator shows where it'll land)
 3. Toolbar:
    - **Enable All / Disable All** — flip every group
