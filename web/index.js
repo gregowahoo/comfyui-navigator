@@ -7,7 +7,7 @@ import { app } from "../../scripts/app.js";
 // Bump on every release. Exposed on window so it's trivial to check in the
 // console (`window.__cnv_version`) whether the browser is on the latest JS
 // or still serving a cached older copy.
-const CNV_VERSION = "0.4.3";
+const CNV_VERSION = "0.4.5";
 try {
   window.__cnv_version = CNV_VERSION;
   console.info(`[comfyui-navigator] loaded v${CNV_VERSION}`);
@@ -855,6 +855,24 @@ function renderList() {
       if (e.button !== 0) return;
       if (e.target.closest(".cnv-toggle")) return;
       jumpToGroup(g);
+    });
+
+    // Double-click the row → TOGGLE the group: enable it when off, disable it
+    // when on. The toggle pill keeps its own click handler too; this is a quick
+    // "flip this group" gesture on the whole row. (The underlying single clicks
+    // still fire, so a dbl-click also pans here.)
+    row.addEventListener("dblclick", (e) => {
+      if (e.target.closest(".cnv-toggle")) return; // pill manages itself
+      const current = isGroupEnabled(title);
+      if (current === null) return; // no muter owns this group → nothing to flip
+      const next = !current;
+      if (!setGroupEnabled(title, next)) return;
+      if (toggle) {
+        toggle.classList.toggle("cnv-toggle--on", next);
+        const lbl = toggle.querySelector(".cnv-toggle__label");
+        if (lbl) lbl.textContent = next ? "yes" : "no";
+      }
+      row.classList.toggle("cnv-row--enabled", next);
     });
 
     state.listEl.appendChild(row);
